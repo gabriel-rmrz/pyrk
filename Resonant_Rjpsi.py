@@ -25,15 +25,18 @@ from pdb import set_trace
 
 #loop sui dataset
 
-for dataset in [args.f_data,args.f_mc_mu,args.f_mc_tau]: 
+for dataset in [args.f_1,args.f_2,args.f_3]: 
+    if(dataset==''):
+        continue
     print("Opening file", dataset)
     f=open(dataset,"r")
     paths = f.readlines()
     final_dfs['pf'] = None
     #print(final_dfs['pf'])
-    for fname in paths:
+    for i,fname in enumerate(paths):
         fname= fname.strip('\n')
-        print("Processing file ", fname)
+        if(i%1==0):
+            print("Processing file ", fname)
         #nf=NanoFrame('root://t3dcachedb03.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Apr06/Charmonium/crab_data_Run2018D_pr_v2/200406_134114/0000/RJpsi_data_2020Apr06_535.root',)
         nf = NanoFrame(fname, )#branches = branches)
         # Load the needed collections, NanoFrame is just an empty shell until we call the collections
@@ -53,58 +56,24 @@ for dataset in [args.f_data,args.f_mc_mu,args.f_mc_tau]:
         bcands['luminosityBlock'] = nf['luminosityBlock']    
         bcands['l_xy_sig'] = bcands.l_xy / np.sqrt(bcands.l_xy_unc)
 
-        # Attach the trigger muon, identified as the closest in dz to the lead electron
-        '''
-        muon_trg_mask = (muons.isTriggering == 1)
-        for path, pt_thr in [('Mu8_IP5', 8), ('Mu10p5_IP3p5', 10), ('Mu8_IP3', 8), ('Mu8p5_IP3p5', 8.5), 
-                             ('Mu9_IP5', 9), ('Mu7_IP4', 7), ('Mu9_IP4', 9), ('Mu9_IP6', 9), 
-                             ('Mu8_IP6', 8), ('Mu12_IP6', 12)]:
-            if not any(path in i for i in hlt.columns): # the trigger is not here
-                continue
-            else:
-                #merge all the parts and compute an or
-                hlt_fired = np.hstack(
-                    [hlt[i].reshape((hlt[i].shape[0], 1)) for i in hlt.columns if path in i]
-                ).any(axis = 1)
-                muon_trg_mask = muon_trg_mask | (hlt_fired & (muons.p4.pt > pt_thr))
-
-        one_trg_muon = (muon_trg_mask.sum() != 0)
-        trig_mu = muons[muon_trg_mask][one_trg_muon]
-        # bcands = bcands[one_trg_muon]
-
-        # e1z, muz = bcands.e1.vz.cross(trig_mu.vz, nested = True).unzip()
-        # closest_mu = np.abs(e1z - muz).argmin().flatten(axis = 1)
-        # bcands['trg_mu'] = trig_mu[closest_mu]
-        '''
-
         # Candidate selection, cut-based for the moment
 
+        '''
         b_selection = (bcands.k.tightId == 1) & (bcands.mu1.mediumId == 1) & (bcands.mu2.mediumId == 1) & \
                   ((bcands.l_xy / bcands.l_xy_unc) > 10) & (bcands.svprob > 0.05) & (bcands.cos2D > 0.95) & \
                   (bcands.mass <6.3) & (bcands.k.p4.pt >4) & (bcands.p4.pt >15) & \
                   ((bcands.k_iso03/bcands.p4.pt)<0.2) & (bcands.m_jpsi < 3.1969) & (bcands.m_jpsi>2.9969) 
 
         b_pf = bcands.mu1.isPFcand & bcands.mu2.isPFcand & bcands.k.isPFcand
-    #    b_lpt = bcands.e1.isLowPt & bcands.e2.isLowPt & (bcands.e1.mvaId > 3.96) & (bcands.e2.mvaId > 3.96)
-    #    b_mix = (bcands.e1.isLowPt & (bcands.e1.mvaId > 3.96) & bcands.e2.isPF) | \
-     #           (bcands.e2.isLowPt & (bcands.e2.mvaId > 3.96) & bcands.e1.isPF)
-
-
-        best_pf_cand = bcands[b_selection & b_pf].svprob.argmax()
-        bcands_pf = (bcands[b_selection & b_pf][best_pf_cand]).flatten()
-        ''' 
-        best_lpt_cand = bcands[b_selection & b_lpt].svprob.argmax()
-        bcands_lpt = (bcands[b_selection & b_lpt][best_lpt_cand]).flatten()
-
-        best_mix_cand = bcands[b_selection & b_mix].svprob.argmax()
-        bcands_mix = (bcands[b_selection & b_mix][best_mix_cand]).flatten()
         '''
+        b_selection = (bcands.k.tightId == 1) & (bcands.mu1.mediumId == 1) & (bcands.mu2.mediumId == 1)
+        best_pf_cand = bcands[b_selection].svprob.argmax()
+        bcands_pf = (bcands[b_selection][best_pf_cand]).flatten()
+
         dfs = {}
 
         for name, tab, sel in [
-                ('pf', bcands_pf, b_selection & b_pf), 
-           #     ('lpt', bcands_lpt, b_selection & b_lpt),
-           #     ('mix', bcands_mix, b_selection & b_mix),
+                ('pf', bcands_pf, b_selection), 
         ]:
             dfs[name] = pd.DataFrame()
             df = dfs[name]
@@ -114,6 +83,12 @@ for dataset in [args.f_data,args.f_mc_mu,args.f_mc_tau]:
             df['mu1pt'] = tab.mu1.p4.pt
             df['mu2pt'] = tab.mu2.p4.pt
             df['kpt'] = tab.k.p4.pt
+            df['mu1mass'] = tab.mu1.p4.mass
+            df['mu2mass'] = tab.mu2.p4.mass
+            df['kmass'] = tab.k.p4.mass
+            df['mu1_isPF'] = tab.mu1.isPFcand
+            df['mu2_isPF'] = tab.mu2.isPFcand
+            df['k_isPF'] = tab.k.isPFcand
             df['Bcharge'] = tab.charge
             df['Bpt'] = tab.p4.pt
             df['Beta'] = tab.p4.eta
@@ -123,6 +98,20 @@ for dataset in [args.f_data,args.f_mc_mu,args.f_mc_tau]:
             df['Bmll_raw'] = tab.m_jpsi
             df['Bm_miss_sq'] = tab.m_miss_sq
             df['Bmass'] = tab.p4.mass
+            df['Bb_iso03'] = tab.b_iso03
+            df['Bb_iso04'] = tab.b_iso04
+            df['Bk_iso03'] = tab.k_iso03
+            df['Bk_iso04'] = tab.k_iso04
+            df['Bl1_iso03'] = tab.l1_iso03
+            df['Bl1_iso04'] = tab.l1_iso04
+            df['Bl2_iso03'] = tab.l2_iso03
+            df['Bl2_iso04'] = tab.l2_iso04
+            df['BE_mu_star']=tab.E_mu_star
+            df['BE_mu_canc']=tab.E_mu_canc
+            df['BQ_sq']=tab.Q_sq
+            df['Bpt_var']=tab.pt_var
+            df['Bpt_miss_vec']=tab.pt_miss_vec
+            df['BDR']=tab.DR
             df['nB'] = sel.sum()[sel.sum() != 0]
 
         #final_dfs['lpt'] = pd.concat((final_dfs['lpt'], dfs['lpt']))
@@ -130,10 +119,12 @@ for dataset in [args.f_data,args.f_mc_mu,args.f_mc_tau]:
         final_dfs['pf'] = pd.concat((final_dfs['pf'], dfs['pf']))
         #print(final_dfs['pf'])
         #final_dfs['mix'] = pd.concat((final_dfs['mix'], dfs['mix']))
-
-#final_dfs['lpt'].to_hdf(args.f_out, 'lpt', mode = 'w')
-    final_dfs['pf'].to_hdf(dataset.strip('.txt')+'.h5', 'pf', mode = 'w')
-    print("Saved file "+dataset.strip('.txt')+'.h5')
+        #print(len(final_dfs['pf']))
+        #final_dfs['lpt'].to_hdf(args.f_out, 'lpt', mode = 'w')
+    dataset=dataset.strip('.txt')
+    name=dataset.split('/')
+    final_dfs['pf'].to_hdf('hd5_files/'+name[len(name)-1]+'.h5', 'pf', mode = 'w')
+    print("Saved file "+ 'hd5_files/'+ name[len(name)-1]+'.h5')
     print("")
 #final_dfs['mix'].to_hdf(args.f_out, 'mix', mode = 'a')
 print('DONE! Processed events: ', nprocessed)
