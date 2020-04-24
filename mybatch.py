@@ -4,9 +4,10 @@ import math
 parser = ArgumentParser()
 
 
-parser.add_argument('f_1', help='txt file with paths of NanoAOD files 1')
-parser.add_argument('--f_2', default='',help='txt file with paths of NanoAOD files 2')
-parser.add_argument('--f_3', default='',help='txt file with paths of NanoAOD files 3')
+parser.add_argument('--f_1', default='' ,help='txt file with paths of NanoAOD data')
+parser.add_argument('--f_2', default='',help='txt file with paths of NanoAOD mc mu')
+parser.add_argument('--f_3', default='',help='txt file with paths of NanoAOD mc tau')
+parser.add_argument('--f_4', default='',help='txt file with paths of NanoAOD mc onia')
 
 #,nargs='+',
 #nargs='?',
