@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import uproot_methods
 from uproot_methods.classes.TH1 import from_numpy
 import uproot
-#funzione che fa istogrammi con numpy
+from create_datacard import create_datacard
 
 def histo(arr, bins=10, rangex=None, normed=None, weights=None, density=None,
             **kwargs):
@@ -26,7 +26,6 @@ def histo(arr, bins=10, rangex=None, normed=None, weights=None, density=None,
 
 #compute the scale factor of mc histo comparing last or first bin of data histo
 def compute_scale_factor(pf_data,pf_mc,bins,rangex,bin="first"):
-    print("Computing the scale factor...")
     mc_info=plt.hist(pf_mc,bins = bins,
                           label = 'MC',
                           range = rangex,  color = colors[3])
@@ -40,7 +39,7 @@ def compute_scale_factor(pf_data,pf_mc,bins,rangex,bin="first"):
         first_bin=next(i for i,v in enumerate(mc_info[0]) if v >= 3)
         scale_factor=((data_info[0][first_bin]+data_info[0][first_bin+1])/(mc_info[0][first_bin]+mc_info[0][first_bin+1]))
         
-    if(bin=="last"):
+    elif(bin=="last"):
         last_bin=next(i for i,v in reversed(list(enumerate(mc_info[0]))) if v>=3)
         scale_factor=(data_info[0][last_bin]+data_info[0][last_bin-1])/(mc_info[0][last_bin]+mc_info[0][last_bin-1])
     else:
@@ -49,52 +48,56 @@ def compute_scale_factor(pf_data,pf_mc,bins,rangex,bin="first"):
     return mc_scaled,mc_info[1]    
 
 
-def plot_and_save(name,file_name_add, pf_t, pf_m, pf_o, pf_data, bins, rangex, last_bin=False, comp_scale_factor=False):
+#def plot_and_save(name,file_name_add, pf_t, pf_m, pf_o, pf_data, bins, rangex, last_bin=False, comp_scale_factor=False, datacard= False, log_option=False):
+def plot_and_save(name,file_name_add, pf, bins, rangex, last_bin=False, comp_scale_factor=False, datacard= False, log_option=False):
     print("Creating plot for "+name)
-  
+
+    pf_var_tmp=[]
+    if(name=="Bm_miss_sq"):
+        for dset in pf:
+            pf_var_tmp.append(dset.Bm_miss_sq)
+
+    pf_var=[]
     if(last_bin==True):
         print("Overflow option chosen.")
-        last=rangex[-1]-1
-        pf_m_var=[last if item>=last else item for item in pf_m]
-        pf_t_var=[last if item>=last else item for item in pf_t]
-        pf_o_var=[last if item>=last else item for item in pf_o]
-        pf_data_var=[last if item>=last else item for item in pf_data]
+        last=rangex[-1]-(rangex[-1]/bins)
+        for dset in pf_var_tmp:
+            pf_var.append([last if item>=last else item for item in dset])
         
     else:
-        pf_m_var=pf_m[:]
-        pf_t_var=pf_t[:]
-        pf_o_var=pf_o[:]
-        pf_data_var=pf_data[:]
+        for dset in pf_var_tmp:
+            pf_var.append(dset[:])
 
     if(comp_scale_factor==True):
         print("Computing the scale factors...")
-        mc_mu,bin_mu=compute_scale_factor(pf_data_var,pf_m_var,bins,rangex,"first")
-        mc_tau,bin_tau=compute_scale_factor(pf_data_var,pf_t_var,bins,rangex,"last")
-        mc_onia,bin_onia=compute_scale_factor(pf_data_var,pf_o_var,bins,rangex,"last")
+        mc_mu,bin_mu=compute_scale_factor(pf_var[0],pf_var[1],bins,rangex,"first")
+        mc_tau,bin_tau=compute_scale_factor(pf_var[0],pf_var[2],bins,rangex,"last")
+        mc_onia,bin_onia=compute_scale_factor(pf_var[0],pf_var[3],bins,rangex,"last")
         print("Plotting histo...")
         fig2, ax=plt.subplots(figsize=(10, 10))
-        stack_histo=plt.hist([bin_mu[:-1],bin_tau[:-1],bin_onia[:-1]], bin_onia, label=['MC mu','MC tau','MC X'],weights=[mc_mu,mc_tau,mc_onia],color= [colors[1],colors[2],colors[3]],histtype='barstacked',stacked =True)
+        stack_histo=plt.hist([bin_mu[:-1],bin_tau[:-1],bin_onia[:-1]], bin_onia, label=['MC mu','MC tau','MC X'],weights=[mc_mu,mc_tau,mc_onia],color= [colors[1],colors[2],colors[3]],histtype='barstacked',stacked =True, log=log_option)
 
     elif(comp_scale_factor==False):
         scale_factor_mu= 49.04117647058823 * 0.89402  #values from combine
-        scale_mu=[scale_factor_mu for item in pf_m_var]
+        scale_mu=[scale_factor_mu for item in pf_var[1]]
         scale_factor_tau= 29.035714285714285 * 0.27791   #values from combine
-        scale_tau=[scale_factor_tau for item in pf_t_var]
+        scale_tau=[scale_factor_tau for item in pf_var[2]]
         scale_factor_onia=22.933333333333334 * 0.13395    #values from combine
-        scale_onia=[scale_factor_onia for item in pf_o_var]
+        scale_onia=[scale_factor_onia for item in pf_var[3]]
         print("Plotting histo...")
         fig2, ax=plt.subplots(figsize=(10, 10))
-        stack_histo=plt.hist([pf_m_var,pf_t_var,pf_o_var], bins=bins, range=rangex, weights=[scale_mu,scale_tau,scale_onia],label=['MC mu','MC tau','MC X'],color= [colors[1],colors[2],colors[3]],histtype='barstacked',stacked =True)
+        stack_histo=plt.hist([pf_var[1],pf_var[2],pf_var[3]], bins=bins, range=rangex, weights=[scale_mu,scale_tau,scale_onia],label=['MC mu','MC tau','MC X'],color= [colors[1],colors[2],colors[3]],histtype='barstacked',stacked =True,log=log_option)
         
 
-    data_info=histo(pf_data_var, bins = bins, 
+    data_info=histo(pf_var[0], bins = bins, 
              label = 'Data', 
              rangex = rangex, fmt = 'o', c = colors[0])
     
     if(last_bin==True):
-        xlabels = [n for n in range(-1,last+1)]
-        xlabels=np.array(xlabels).astype(str)
-        xlabels[-1] += '+'
+        fig2.canvas.draw()
+        xlabels = [item.get_text() for item in ax.get_xticklabels()]
+        xlabels[-3] += '+'
+        xlabels[-2]= ' '
         ax.set_xticklabels(xlabels)
     
     plt.xlabel(name)
@@ -110,13 +113,12 @@ def plot_and_save(name,file_name_add, pf_t, pf_m, pf_o, pf_data, bins, rangex, l
     mu_int=sum(stack_histo[0][0])
     onia_int= sum(stack_histo[0][2]-stack_histo[0][1])
     data_int=sum(data_info[0])
-    print("The MC tau integral is ",tau_int)
-    print("The MC mu integral is ",mu_int)
-    print("The MC X integral is ",onia_int)
-    print("The data integrale is ",data_int)
 
+    if(datacard==True):
+        create_datacard(name+file_name_add+'.root',data_int,mu_int,tau_int,onia_int)
+        print("Saved datacard.txt")
     print("Creating root histos...")
-    out_data = from_numpy(histo(pf_data_var, bins = bins, label = 'data_obs', rangex = rangex))
+    out_data = from_numpy(histo(pf_var[0], bins = bins, label = 'data_obs', rangex = rangex))
     out_m = from_numpy(histo(stack_histo[1][:-1], stack_histo[1], weights=stack_histo[0][0],c=colors[1],label = 'MC mu',rangex = rangex))
     out_t = from_numpy(histo(stack_histo[1][:-1], stack_histo[1], weights=stack_histo[0][1]-stack_histo[0][0],c=colors[2],label = 'MC tau',rangex = rangex))
     out_x = from_numpy(histo(stack_histo[1][:-1], stack_histo[1], weights=stack_histo[0][2]-stack_histo[0][1],c=colors[3],label = 'MC x',rangex = rangex)) 
@@ -136,30 +138,30 @@ def selection(df):
     return df[(df.Blxy_sig > 10) & (df.Bsvprob > 0.05) & (df.Bcos2D > 0.95) & \
               (df.Bmass <6.3) & (df.kpt >4) & (df.Bpt >15) & \
               (df.Bmll_raw < 3.1969) & (df.Bmll_raw>2.9969) & \
-              ((df.Bb_iso03/df.Bpt)<0.2)\
-#              (bcands.k.tightId == 1) & (bcands.mu1.mediumId == 1) & (bcands.mu2.mediumId == 1) & \
+              ((df.Bb_iso03/df.Bpt)<0.2) & \
+              (df.mu1_tightID == 1) & (df.mu1_mediumID == 1) & (df.mu2_mediumID == 1) \
               #(df.k.tightId == 1) & (df.mu1.mediumId == 1) & (df.mu2.mediumId == 1) & \ already applied in the .h5 files      
           ]
 
 
 print("Opening files...")
 #Apre i file .h5 salvati
-pf_t = pd.read_hdf('hd5_files/OLD3/BcToJpsiTauNu.h5', 'pf')
-pf_m = pd.read_hdf('hd5_files/OLD3/BcToJpsiMuNu.h5', 'pf')
-pf_o = pd.read_hdf('hd5_files/OLD3/OniaX.h5', 'pf')
-pf_data = pd.read_hdf('hd5_files/OLD3/data_files_path.h5', 'pf')
+
+pf=[]
+files=['hd5_files/data.h5','hd5_files/BcToJpsiMuNu.h5','hd5_files/BcToJpsiTauNu.h5','hd5_files/OLD4/OniaX.h5']
+for fil in files:
+    pf.append(pd.read_hdf(fil,'pf'))
 
 #apply new selections
-pf_t  = selection(pf_t)
-pf_m = selection(pf_m)
-pf_o = selection(pf_o)
-pf_data = selection(pf_data)
+for i in range(len(pf)):
+    pf[i] = selection(pf[i])
 
 #opt matplot
 plt.rcParams.update({'font.size': 18})
 colors = matplotlib.rcParams['axes.prop_cycle'].by_key()['color']
 
-plot_and_save("Bm_miss_sq", "2", pf_t.Bm_miss_sq, pf_m.Bm_miss_sq, pf_o.Bm_miss_sq, pf_data.Bm_miss_sq, 6, (0,7),comp_scale_factor=False,last_bin=True)
+plot_and_save("Bm_miss_sq", "nocuts", pf, 12, (0,6), comp_scale_factor=False, last_bin=True, datacard=True, log_option=False)
+#plot_and_save("Bm_miss_sq", "nocuts", pf_t.Bm_miss_sq, pf_m.Bm_miss_sq, pf_o.Bm_miss_sq, pf_data.Bm_miss_sq, 12, (0,12), comp_scale_factor=False, last_bin=True, datacard=True, log_option=False)
 
 #plot_and_save("B_lxy_sig", "", pf_t.Blxy_sig, pf_m.Blxy_sig, pf_data.Blxy_sig, 20, (0,20))
 #plot_and_save("B_pt_var", "", pf_t.Bpt_var, pf_m.Bpt_var, pf_data.Bpt_var, 20, (-20,45))
@@ -191,3 +193,4 @@ plot_and_save("l2_iso04", "", pf_t.Bl2_iso04/pf_t.mu2pt, pf_m.Bl2_iso04/pf_t.mu2
 plot_and_save("k_iso03", "", pf_t.Bk_iso03/pf_t.kpt, pf_m.Bk_iso03/pf_t.kpt, pf_data.Bk_iso03/pf_t.kpt, 20, (0,1))
 plot_and_save("k_iso04", "", pf_t.Bk_iso04/pf_t.kpt, pf_m.Bk_iso04/pf_t.kpt, pf_data.Bk_iso04/pf_t.kpt, 20, (0,1))
 '''
+
