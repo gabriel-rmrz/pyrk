@@ -8,10 +8,11 @@ First install miniconda following the instructions [here](https://docs.conda.io/
 
 Then clone this package and install the environment:
 ```
-git clone --recursive git@github.com:CMSBParking/pyrk.git
+git clone --recursive git@github.com:friti/pyrk.git
 cd pyrk
-conda create --name pyrk
+conda create --name pyrk python=3.7
 conda activate pyrk
+conda install six
 pip install -r env.pip
 ```
 
