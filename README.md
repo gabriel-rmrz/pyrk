@@ -1,5 +1,5 @@
 # pyrk
-Analysis framework for R(K) analyses
+Analysis framework for R(J/Psi) analysis (forked from R(K) analysis)
 
 ## Installation
 
