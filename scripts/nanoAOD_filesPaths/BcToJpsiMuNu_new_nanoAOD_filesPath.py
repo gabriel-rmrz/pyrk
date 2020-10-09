@@ -1,0 +1,5 @@
+BcToJpsiMuNu_files = ['root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Jul28/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/200728_084005/0000/RJPsi_mc_2020Jul28_1.root',
+'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Jul28/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/200728_084005/0000/RJPsi_mc_2020Jul28_2.root',
+'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Jul28/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/200728_084005/0000/RJPsi_mc_2020Jul28_3.root',
+'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Jul28/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/200728_084005/0000/RJPsi_mc_2020Jul28_4.root',
+'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Jul28/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/200728_084005/0000/RJPsi_mc_2020Jul28_5.root']
