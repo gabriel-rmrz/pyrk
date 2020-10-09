@@ -14,6 +14,7 @@ conda create --name pyrk python=3.7
 conda activate pyrk
 conda install six
 pip install -r env.pip
+conda install -c conda-forge root
 ```
 
 You are ready to go! Remember to activate the pyrk environment at each login!
