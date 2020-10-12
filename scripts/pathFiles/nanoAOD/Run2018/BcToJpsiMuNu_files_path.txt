@@ -1,0 +1,5 @@
+root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Oct08/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/201008_152659/0000/RJPsi_mc_2020Oct08_1.root
+root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Oct08/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/201008_152659/0000/RJPsi_mc_2020Oct08_2.root
+root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Oct08/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/201008_152659/0000/RJPsi_mc_2020Oct08_3.root
+root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Oct08/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/201008_152659/0000/RJPsi_mc_2020Oct08_4.root
+root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti/crab_job_2020Oct08/BcToJPsiMuNu_TuneCP5_13TeV-bcvegpy2-pythia8-evtgen/crab_BcToJpsiMuNu_new/201008_152659/0000/RJPsi_mc_2020Oct08_5.root
