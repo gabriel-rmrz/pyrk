@@ -1,0 +1,4 @@
+/pnfs/psi.ch/cms/trivcat/store/user/friti/dataframes_merged_28Oct2020/BcToJpsiMuNu.h5
+/pnfs/psi.ch/cms/trivcat/store/user/friti/dataframes_merged_28Oct2020/BcToJpsiTauNu.h5
+/pnfs/psi.ch/cms/trivcat/store/user/friti/dataframes_merged_28Oct2020/OniaX.h5
+/pnfs/psi.ch/cms/trivcat/store/user/friti/dataframes_merged_28Oct2020/data.h5
