@@ -3,6 +3,7 @@ import ROOT
 from cmsstyle import CMS_lumi
 from sample import sample_coll
 import os
+import math
 #in input:
 #histo data, array of histos of mc, class var,  
 
@@ -75,13 +76,13 @@ def makeComparison(mch_tmp, var, addFile = ""):
     CMS_lumi(c, 4, 1)
     c.RedrawAxis()
 
-    folder = "png_plots/"
+    folder = "pngPlots/"
     c.SaveAs(folder + var.name + "_comparison_"   + addFile + ".png")
     c.SaveAs(folder + var.name + "_comparison_"  + addFile + ".pdf")
     
 
 
-def makeSinglePlot(his,var,smpl, addFile="", saveFile = True):
+def makeSinglePlot(his,var,smpl, addFile="", saveFile = True, retur = False):
     ROOT.gROOT.SetBatch()
     ROOT.gStyle.SetOptStat(0)
     his.SetMarkerStyle(20)
@@ -131,12 +132,14 @@ def makeSinglePlot(his,var,smpl, addFile="", saveFile = True):
     c.RedrawAxis()
     
     if saveFile:
-        folder = "png_plots/"
+        folder = "pngPlots/"
         c.SaveAs(folder + var.name + "_" + smpl.name + addFile + ".png")
         c.SaveAs(folder + var.name + "_" + smpl.name + addFile + ".pdf")
         print("Saved '"+folder + var.name + "_" + smpl.name + addFile + ".png'")
+    if (retur == True):
+        return his
 
-def makeStack(datah, mch_tmp, var, fit=False,  addFileName = "", rootFile = False, ratioPad = True):
+def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile = False, ratioPad = True, over = False, fact = 1):
     os.system('set LD_PRELOAD=libtcmalloc.so')
     ROOT.gROOT.SetBatch()
     order = ["mc_mu", "mc_tau", "mis_id", "mc_comb"]
@@ -145,44 +148,42 @@ def makeStack(datah, mch_tmp, var, fit=False,  addFileName = "", rootFile = Fals
     if(len(his) != len(mch_tmp)):
         print("ERROR: Problem in histos names!")
         return 0
-    '''
-    # establish the order of plotting of histos
-    order = ["mc_mu", "mc_tau", "mis_id", "mc_comb"]
-    mch = [histo for name in order for histo in mch_tmp if histo.GetName() == name ]
-    if(len(mch) != len(mch_tmp)):
-        print("ERROR: Problem in histos names!")
-        return 0
-    '''
+
     stack= ROOT.THStack("","")
-    for i,histo in zip(sm,his):
+    for i,histo,name in zip(sm,his,order):
+        if name == 'mc_tau':  #to multiply the over and underflow for the factor to have tau = mu
+            f = fact
+        else:
+            f = 1
+        if over:
+            histo.SetBinContent(1, histo.GetBinContent(0) + histo.GetBinContent(1))
+            histo.SetBinError(1, math.sqrt(pow(histo.GetBinError(0),2) + pow(histo.GetBinError(1),2)))
+            histo.SetBinContent(var.nbins, histo.GetBinContent(var.nbins) + histo.GetBinContent(var.nbins+1))
+            histo.SetBinError(var.nbins, math.sqrt(pow(histo.GetBinError(var.nbins),2) + pow(histo.GetBinError(var.nbins+1),2)))
+
+        histo.Scale(f)
         histo.SetFillColor(sample_coll[i].color)
         histo.SetLineColor(sample_coll[i].color)
         histo.GetXaxis().SetRangeUser(var.xmin,var.xmax)
         stack.Add(histo)
+
     #stack
-    '''
-    for i,histo in enumerate(mch):
-        histo.SetFillColor(sample_coll[i].color)
-        histo.SetLineColor(sample_coll[i].color)
-        histo.GetXaxis().SetRangeUser(var.xmin,var.xmax)
-        stack.Add(histo)
-    '''
+    datah.SetMarkerStyle(20)
+    datah.SetMarkerSize(0.9)
+    datah.SetBinContent(1, datah.GetBinContent(0) + datah.GetBinContent(1))
+    datah.SetBinError(1, math.sqrt(pow(datah.GetBinError(0),2) + pow(datah.GetBinError(1),2)))
+    datah.SetBinContent(var.nbins, datah.GetBinContent(var.nbins) + datah.GetBinContent(var.nbins+1))
+    datah.SetBinError(var.nbins, math.sqrt(pow(datah.GetBinError(var.nbins),2) + pow(datah.GetBinError(var.nbins+1),2)))
+    
     maximum = max(datah.GetMaximum(), stack.GetMaximum())
     stack.SetMaximum(maximum*1.35)
     stack.SetMinimum(0.)
-
-    datah.SetMarkerStyle(20)
-    datah.SetMarkerSize(0.9)
 
     #legend
     legend = ROOT.TLegend(0.45,0.70,0.78,0.86)
     legend.AddEntry(datah, sample_coll[-1].legendName, "lp")
     for i,histo in zip(sm,his):
         legend.AddEntry(histo, sample_coll[i].legendName, "f")
-    '''
-    for i,histo in enumerate(mch):
-        legend.AddEntry(histo, sample_coll[i].legendName, "f")
-    '''
     legend.SetTextFont(43)
     legend.SetTextSize(15)
     legend.SetBorderSize(0)
@@ -191,8 +192,6 @@ def makeStack(datah, mch_tmp, var, fit=False,  addFileName = "", rootFile = Fals
     ########
     #canvas#
     ########
-    # c = ROOT.TCanvas("","",700, 700) 
-    # c.cd() 
 
     if not ratioPad:
         main_pad = ROOT.TCanvas("","",700, 700) 
@@ -235,7 +234,8 @@ def makeStack(datah, mch_tmp, var, fit=False,  addFileName = "", rootFile = Fals
     stack.GetXaxis().SetTitleFont(43)
     stack.GetXaxis().SetTitleSize(18)
     stack.GetXaxis().SetTitle(var.xlabel + " " + var.unit)
-        
+    stack.SetMinimum(0.1)
+    #ROOT.gPad.SetLogy()
 
     # Stat. Errors
     h_err = stack.GetStack().Last().Clone("h_err")
@@ -354,17 +354,16 @@ def makeStack(datah, mch_tmp, var, fit=False,  addFileName = "", rootFile = Fals
     if fit:
         folder = "fitPlt/"
     else:
-        folder = "stackPlt/"
-        #    c.SaveAs(folder + var.name + "_" + addFileName + ".png")
-        #    c.SaveAs(folder + var.name + "_" + addFileName + ".pdf")
+        folder = path + "/"
 
     if not ratioPad:
-        main_pad.SaveAs(folder + var.name + "_" + addFileName + ".png")
-        main_pad.SaveAs(folder + var.name + "_" + addFileName + ".pdf")
-
+        main_pad.SaveAs(folder + var.name  +"_"+ addFileName+ ".png")
+        main_pad.SaveAs(folder + var.name  + "_"+ addFileName+".pdf")
+        
+        
     if ratioPad:
-        c.SaveAs(folder + var.name + "_" + addFileName + ".png")
-        c.SaveAs(folder + var.name + "_" + addFileName + ".pdf")
+        c.SaveAs(folder + var.name + "_"+ addFileName+ ".png")
+        c.SaveAs(folder + var.name + "_"+ addFileName+ ".pdf")
 
 
     stack.Delete()
