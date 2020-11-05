@@ -12,17 +12,18 @@ import pandas as pd
 import uproot_methods
 import ROOT
 from pdb import set_trace
+from root_pandas import to_root
 
 maxEvents = -1
 checkDoubles = True
 
-nMaxFiles = -1
+nMaxFiles = 2
 skipFiles = 0
 
 
 #try different ways of choosing the candidate (flat ntuple)
 final_dfs = {
-    'pf' : pd.DataFrame(),
+    'vtxprob' : pd.DataFrame(),
     'ptmax' : pd.DataFrame() 
 }
 
@@ -36,7 +37,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_gen]:
     print("Opening file", dataset)
     f=open(dataset,"r")
     paths = f.readlines()
-    final_dfs['pf']=None
+    final_dfs['vtxprob']=None
     final_dfs['ptmax']=None
     
     nprocessedDataset = 0
@@ -134,7 +135,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_gen]:
         bcands['mu2'] = mu2
         bcands['k'] = k
 
-        b_selection = (bcands.k.p4.pt > -99)
+        b_selection = ((bcands.p4.mass < 10 ) & (bcands.svprob > 1e-7))
         x_selection= (bcands.k.p4.pt > -99)
 
         
@@ -182,7 +183,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_gen]:
         dfs = {}
 
         for name, tab, sel in [
-                ('pf', bcands_pf, b_selection & x_selection), 
+                ('vtxprob', bcands_pf, b_selection & x_selection), 
                 ('ptmax', bcands_ptmax, b_selection & x_selection), 
         ]:
             dfs[name] = pd.DataFrame()
@@ -429,7 +430,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_gen]:
                     df['k_grandgrandmother_vz'] = tab.k.grandgrandmother.vz
                     
                 
-        final_dfs['pf'] = pd.concat((final_dfs['pf'], dfs['pf']))
+        final_dfs['vtxprob'] = pd.concat((final_dfs['vtxprob'], dfs['vtxprob']))
         final_dfs['ptmax'] = pd.concat((final_dfs['ptmax'], dfs['ptmax']))
         #print("DFS")
         #print(dfs['pf'])
@@ -452,9 +453,13 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_gen]:
     d=name[len(name)-1].split('_')
     adj=''
     if(dataset != args.mc_x):
-        adj = '_UL'
-    final_dfs['pf'].to_hdf(d[0]+adj+'.h5', 'pf', mode = 'w')
-    final_dfs['ptmax'].to_hdf(d[0]+adj+'.h5', 'ptmax', mode = 'a')
+        #        adj = '_UL'
+        adj = '_prova'
+    
+    final_dfs['vtxprob'].to_root('dataframes/'+d[0]+adj+'.root', key='vtxprob')
+    final_dfs['ptmax'].to_root('dataframes/'+d[0]+adj+'.root', key='ptmax',mode='a')
+    #    final_dfs['vtxprob'].to_hdf(d[0]+adj+'.h5', 'vtxprob', mode = 'w')
+    #final_dfs['ptmax'].to_hdf(d[0]+adj+'.h5', 'ptmax', mode = 'a')
     print("Saved file "+ d[0]+adj+'.h5')
 
 
