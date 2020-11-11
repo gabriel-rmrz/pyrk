@@ -462,6 +462,17 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                             df['mu2_grandgrandmother_vz'] = tab.mu2.grandgrandmother.vz
                             df['k_grandgrandmother_vz'] = tab.k.grandgrandmother.vz
                     
+                        if(dataset == args.mc_x):
+                            df['weightGen'] = tab.weightGen
+                            if (name == 'is_bcbkg'):
+                                df['is_psi2s_mu'] = tab.is_psi2s_mu
+                                df['is_chic0_mu'] = tab.is_chic0_mu
+                                df['is_chic1_mu'] = tab.is_chic1_mu
+                                df['is_chic2_mu'] = tab.is_chic2_mu
+                                df['is_hc_mu'] = tab.is_hc_mu
+                                df['is_psi2s_tau'] = tab.is_psi2s_tau
+                                df['is_jpsi_3pi'] = tab.is_jpsi_3pi
+                                df['is_jpsi_hc'] = tab.is_jpsi_hc
                 
                     #print("Finito di processare la flag ",name, " la concateno a quella totale.")
                     if(channel=='BTommm'):
