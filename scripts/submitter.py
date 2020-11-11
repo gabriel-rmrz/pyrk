@@ -5,7 +5,7 @@ import sys
 dataset_dict = {'BcToJpsiMuNu':['--mc_mu /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/BcToJpsiMuNu_files_path.txt'],
                 'BcToJpsiTauNu':['--mc_tau /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/BcToJpsiTauNu_files_path.txt'],
                 'OniaX':['--mc_x /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018/OniaX_files_path.txt'],
-                'data':['--data /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/data_files_path_new2018D.txt']}
+                'data':['--data /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/data_files_path_pichannel.txt']}
 
 dataset = 'data'
 dataset_opt = dataset_dict[dataset][0]
@@ -18,6 +18,7 @@ files_per_job = 200
 njobs = count_files//files_per_job + 1  
 
 print("Submitting %s jobs" %(njobs))
+print("Submitting in quick.")
 production_tag = datetime.date.today().strftime('%Y%b%d')
 
 date_dir = 'dataframes_'+ production_tag
@@ -62,7 +63,7 @@ for ijob in range(njobs):
     for line in fin:
         #read replace the string and write to output file
         if   'HOOK_MAX_FILES' in line: fout.write(line.replace('HOOK_MAX_FILES' , '%s' %files_per_job))
-        elif 'HOOK_FILE_OUT'   in line: fout.write(line.replace('HOOK_FILE_OUT'   , '/scratch/friti/%s/%s_UL_%d.h5' %(dataset, dataset,ijob)))
+        elif 'HOOK_FILE_OUT'   in line: fout.write(line.replace('HOOK_FILE_OUT'   , '/scratch/friti/%s/%s_UL_%d' %(dataset, dataset,ijob)))
         elif 'HOOK_SKIP_FILES'in line: fout.write(line.replace('HOOK_SKIP_FILES', '%d' %(files_per_job*ijob)))
         else: fout.write(line)
     #close input and output files
@@ -78,14 +79,14 @@ mkdir -p /scratch/friti/{scratch_dir}
 ls /scratch/friti/
 python {cfg} {option}
 ls /scratch/friti/{scratch_dir}
-xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.h5 root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/.
-rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.h5
+xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/.
+rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root
 
 '''.format(dir='/'.join([os.getcwd(), out_dir]), scratch_dir= dataset, cfg='Resonant_Rjpsi_chunk%d.py' %(ijob), option= dataset_opt, dat = dataset,ijob=ijob, se_dir=out_dir)
     )
     flauncher.close()
     
-    command_sh_batch = 'sbatch -p wn --account=t3 -o %s/logs/chunk%d.log -e %s/errs/chunk%d.err --job-name=%s --time=900 --mem=6GB %s/submitter_chunk%d.sh' %(out_dir, ijob, out_dir, ijob, out_dir, out_dir, ijob)
+    command_sh_batch = 'sbatch -p quick --account=t3 -o %s/logs/chunk%d.log -e %s/errs/chunk%d.err --job-name=%s --time=60 --mem=6GB %s/submitter_chunk%d.sh' %(out_dir, ijob, out_dir, ijob, out_dir, out_dir, ijob)
 
     os.system(command_sh_batch)
     
