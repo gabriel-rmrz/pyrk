@@ -49,7 +49,7 @@ computeFR = False
 prob_shapes_plot  = False
 
 fitPassFail  = True
-saveonwww = True #save on the website
+saveonwww = False #save on the website
 
 fr = 0.7910354 #0.85373
 misId_norm=fr/(1-fr)
