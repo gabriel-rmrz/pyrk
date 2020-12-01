@@ -1,17 +1,34 @@
+
 #Script that saves a .txt file with the paths of nanoAOD files created with CRAB. 
 #In input datasets names separated by a comma, without blanck space
 
 import subprocess
 import os
 import sys
-crab_path = '/work/friti/new/CMSSW_10_2_15/src/PhysicsTools/BParkingNano/production/BParkingNANO_2020Jul28'
 
-dataset_dict = {'data':['data_Run2018A_sep_v1','data_Run2018B_sep_v1','data_Run2018C_sep_v1','data_Run2018D_pr_v2'],
-                'BcToJpsiMuNu':['BcToJpsiMuNu_new'],
-                'BcToJpsiTauNu':['BcToJpsiTauNu'],
-                'OniaX':['OniaX_JpsiToMuMu'],
-                'BToJpsi_ToMuMu':['BToJpsi_ToMuMu']
-            }
+nanotools = True
+
+tier = 'CSCS'
+crab_path = '/work/friti/CMSSW_10_6_5/src/PhysicsTools/NanoAODTools/crab/RJPsiNanoTools_2020Nov26'
+#crab_path = '/work/friti/UL/CMSSW_10_6_14/src/PhysicsTools/BParkingNano/production/RJPsiNANO_2020Nov25'
+#crab_path = '/work/friti/CMSSW_10_6_5/src/PhysicsTools/NanoAODTools/crab/'
+
+if(nanotools):
+    dataset_dict = {'BcToJpsiMuNu':['BcToJpsiMuNu_nanotools'],
+                    'BcToJpsiTauNu':['BcToJpsiTauNu_nanotools'],
+                    'OniaX':['OniaX_nanotools'],
+                    'BcToXToJpsi':['BcToXToJpsi_2_nanotools'],
+                }
+else:
+    dataset_dict = {
+        #'data':['data_Run2018D_UL'],
+        'BcToXToJpsi':['BcToXToJpsi2'],
+        'data':['data_Run2018A_UL','data_Run2018B_UL','data_Run2018C_UL','data_Run2018D_UL'],
+        'BcToJpsiMuNu':['BcToJpsiMuNu'],
+        'BcToJpsiTauNu':['BcToJpsiTauNu'],
+        'OniaX':['OniaX'],
+        'BToJpsi_ToMuMu':['BToJpsi_ToMuMu']
+                }
 #in input i nomi dei dataset separati da una virgola, senza spazio
 datasets = map(str,sys.argv[1].split(','))
  
@@ -22,13 +39,18 @@ for dataset in datasets:
         os.makedirs("txt_files/")
     f = open("txt_files/"+dataset+"_files_path.txt", "w")
     folders = dataset_dict[dataset]
-
     for folder in folders:
         url = os.popen('crab getoutput --xrootd --jobids=1 -d ' + crab_path + '/crab_' + folder + '/').readlines()[0]
+        print(crab_path + '/crab_' + folder)
         print(url)
         s1 = url.split('friti')
         s2 = s1[1].split('0000')
-        newurl = 'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti' + s2[0]
+        if(tier == 'PSI'):
+            newurl = 'root://t3dcachedb03.psi.ch:1094//pnfs/psi.ch/cms/trivcat/store/user/friti' + s2[0]
+        elif(tier == 'CSCS'):
+            newurl = 'srm://storage01.lcg.cscs.ch:8443/srm/managerv2?SFN=/pnfs/lcg.cscs.ch/cms/trivcat/store/user/friti' + s2[0]
+            #newurl = 'root://cms-xrd-global.cern.ch//store/user/friti' + s2[0]
+
 
         i = 0
         print('Checking files in the folder '+newurl.strip('\n'))
