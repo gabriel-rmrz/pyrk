@@ -13,6 +13,11 @@ import uproot_methods
 import ROOT
 from pdb import set_trace
 from root_pandas import to_root
+from uproot_methods import TLorentzVectorArray
+from uproot_methods import TVector3Array
+from uproot_methods import TLorentzVector
+from uproot_methods import TVector3
+from scipy.constants import c as speed_of_light
 
 maxEvents = -1
 checkDoubles = True
@@ -20,7 +25,126 @@ checkDoubles = True
 nMaxFiles = HOOK_MAX_FILES
 skipFiles = HOOK_SKIP_FILES
 
-channels = ['BTommm','BTopmm','BTokmm']
+
+## lifetime weights ##
+def weight_to_new_ctau(old_ctau, new_ctau, ct):
+    '''
+    Returns an event weight based on the ratio of the normalised lifetime distributions.
+    old_ctau: ctau used for the sample production
+    new_ctau: target ctau
+    ct      : per-event lifetime
+    '''
+    weight = old_ctau/new_ctau * np.exp( (1./old_ctau - 1./new_ctau) * ct )
+    return weight
+    
+def lifetime_weight(pf, fake = True):
+    print("Adding lifetime weight branch...")
+    if fake:
+        ctau_weight_central = np.ones(len(pf))
+        ctau_weight_up = np.ones(len(pf))
+        ctau_weight_down = np.ones(len(pf))
+        pf['ctau_weight_central'] = ctau_weight_central
+        pf['ctau_weight_up'] = ctau_weight_up
+        pf['ctau_weight_down'] = ctau_weight_down
+        return pf
+    else:
+        Bc_mass = 6.274
+        ctau_pdg    = 0.510e-12 * speed_of_light * 1000. # in mm
+        ctau_actual = 0.1358
+        ctau_up     = (0.510+0.009)*1e-12 * speed_of_light * 1000. # in mm
+        ctau_down   = (0.510-0.009)*1e-12 * speed_of_light * 1000. # in mm
+        
+        ctau_weight_central = []
+        ctau_weight_up = []
+        ctau_weight_down = []
+
+        for i in range(len(pf)):
+            flag = 0
+            #jpsi vertex
+            if( abs(pf.mu1_mother_pdgId[i]) == 443 ):
+                jpsi_vertex = TVector3(pf.mu1_mother_vx[i],pf.mu1_mother_vy[i],pf.mu1_mother_vz[i])
+            elif( abs(pf.mu2_mother_pdgId[i]) == 443 ):
+                jpsi_vertex = TVector3(pf.mu2_mother_vx[i],pf.mu2_mother_vy[i],pf.mu2_mother_vz[i])
+             
+            else: 
+                flag = 1
+        
+            #Bc vertex
+            if(abs(pf.mu1_grandmother_pdgId[i]) == 541):
+                Bc_vertex = TVector3(pf.mu1_grandmother_vx[i],pf.mu1_grandmother_vy[i],pf.mu1_grandmother_vz[i])
+                Bc_p4 = TLorentzVector.from_ptetaphim(pf.mu1_grandmother_pt[i],pf.mu1_grandmother_eta[i],pf.mu1_grandmother_phi[i],Bc_mass)
+            elif(abs(pf.mu2_grandmother_pdgId[i]) == 541):
+                Bc_vertex = TVector3(pf.mu2_grandmother_vx[i],pf.mu2_grandmother_vy[i],pf.mu2_grandmother_vz[i])
+                Bc_p4 = TLorentzVector.from_ptetaphim(pf.mu2_grandmother_pt[i],pf.mu2_grandmother_eta[i],pf.mu2_grandmother_phi[i],Bc_mass)
+
+            else:
+                flag = 1
+        
+            if(flag == 1):
+                ctau_weight_central.append(1)
+                ctau_weight_up.append (1)
+                ctau_weight_down.append(1)
+       
+            else:
+                # distance
+                lxyz = (jpsi_vertex - Bc_vertex).mag
+                beta = Bc_p4.beta
+                gamma = Bc_p4.gamma
+                ct = lxyz/(beta * gamma)
+                #print(lxyz,beta,gamma,ct)
+                ctau_weight_central.append( weight_to_new_ctau(ctau_actual, ctau_pdg , ct*10.))
+                ctau_weight_up.append (weight_to_new_ctau(ctau_actual, ctau_up  , ct*10.))
+                ctau_weight_down.append(weight_to_new_ctau(ctau_actual, ctau_down, ct*10.))
+
+        pf['ctau_weight_central'] = ctau_weight_central
+        pf['ctau_weight_up'] = ctau_weight_up
+        pf['ctau_weight_down'] = ctau_weight_down
+        return pf
+## end lifetime weights ##
+
+def DR_jpsimu(pf):
+    print("Adding DR between jpsi and mu branch...")
+    mu1_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu1pt,pf.mu1eta,pf.mu1phi,pf.mu1mass)
+    mu2_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu2pt,pf.mu2eta,pf.mu2phi,pf.mu2mass)
+
+    jpsi_p4= mu1_p4 + mu2_p4 
+    #    jpsi_p4 = TLorentzVectorArray.from_ptetaphim((pf.mu1pt+pf.mu2pt),(pf.mu1eta,+pf.mu2eta),(pf.mu1phi+pf.mu2phi),(pf.mu1mass+pf.mu2mass))
+    mu_p4 = TLorentzVectorArray.from_ptetaphim(pf.kpt,pf.keta,pf.kphi,pf.kmass)
+    #    print(jpsi_p4.delta_r(mu_p4))
+    #    pf.copy()
+    pf['DR_jpsimu'] = jpsi_p4.delta_r(mu_p4)
+    return pf
+
+def jpsi_branches(pf):
+    print("Adding jpsi four momentum branches...")
+    mu1_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu1pt,pf.mu1eta,pf.mu1phi,pf.mu1mass)
+    mu2_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu2pt,pf.mu2eta,pf.mu2phi,pf.mu2mass)
+    jpsi_p4= mu1_p4 + mu2_p4
+    
+    #pf = pf.copy()
+
+    pf['jpsi_pt'] = jpsi_p4.pt
+    pf['jpsi_eta'] = jpsi_p4.eta
+    pf['jpsi_phi'] = jpsi_p4.phi
+    pf['jpsi_mass'] = jpsi_p4.mass
+    return pf
+    
+# two decay time branches... which one to choose?
+def decaytime(pf):
+    print("Adding decay time branch...")
+    PV_pos = TVector3Array(pf.pv_x,pf.pv_y,pf.pv_z)
+    jpsiVertex_pos1 = TVector3Array(pf.mu1_vx,pf.mu1_vy,pf.mu1_vz)
+    jpsiVertex_pos2 = TVector3Array(pf.mu2_vx,pf.mu2_vy,pf.mu2_vz)
+
+    dist1 = (PV_pos - jpsiVertex_pos1).mag
+    dist2 = (PV_pos - jpsiVertex_pos2).mag
+
+    decay_time1 = dist1 * 6.276 / (pf.Bpt_reco * 2.998e+10)
+    decay_time2 = dist2 * 6.276 / (pf.Bpt_reco * 2.998e+10)
+    #pf.copy()
+    pf['decay_time1'] = decay_time1
+    pf['decay_time2'] = decay_time2
+    return pf
 
 
 nprocessedAll = 0
@@ -29,6 +153,13 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
     if(dataset==''):
         continue
     print(" ")
+    
+    #    if (dataset == args.data or dataset == args.mc_x ):
+    channels = ['BTommm','BTopmm','BTokmm']
+    
+    '''else:
+        channels =['BTommm']
+    '''
     print("Opening file", dataset)
     f=open(dataset,"r")
     paths = f.readlines()
@@ -40,23 +171,44 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
 
         final_dfs_mmm = {
             'is_jpsi_mu' : pd.DataFrame(),
-            'is_bcbkg' : pd.DataFrame(),
             'is_jpsi_tau' : pd.DataFrame(),
             'is_jpsi_pi' : pd.DataFrame(),
+            'is_psi2s_mu' :pd.DataFrame(),
+            'is_chic0_mu' : pd.DataFrame(),
+            'is_chic1_mu' : pd.DataFrame(),
+            'is_chic2_mu' : pd.DataFrame(),
+            'is_hc_mu' : pd.DataFrame(),
+            'is_psi2s_tau' : pd.DataFrame(),
+            'is_jpsi_3pi' : pd.DataFrame(),
+            'is_jpsi_hc' : pd.DataFrame(),
         }
         
         final_dfs_pmm = {
             'is_jpsi_mu' : pd.DataFrame(),
-            'is_bcbkg' : pd.DataFrame(),
             'is_jpsi_tau' : pd.DataFrame(),
             'is_jpsi_pi' : pd.DataFrame(),
+            'is_psi2s_mu' :pd.DataFrame(),
+            'is_chic0_mu' : pd.DataFrame(),
+            'is_chic1_mu' : pd.DataFrame(),
+            'is_chic2_mu' : pd.DataFrame(),
+            'is_hc_mu' : pd.DataFrame(),
+            'is_psi2s_tau' : pd.DataFrame(),
+            'is_jpsi_3pi' : pd.DataFrame(),
+            'is_jpsi_hc' : pd.DataFrame(),
         }
         
         final_dfs_kmm = {
             'is_jpsi_mu' : pd.DataFrame(),
-            'is_bcbkg' : pd.DataFrame(),
             'is_jpsi_tau' : pd.DataFrame(),
             'is_jpsi_pi' : pd.DataFrame(),
+            'is_psi2s_mu' :pd.DataFrame(),
+            'is_chic0_mu' : pd.DataFrame(),
+            'is_chic1_mu' : pd.DataFrame(),
+            'is_chic2_mu' : pd.DataFrame(),
+            'is_hc_mu' : pd.DataFrame(),
+            'is_psi2s_tau' : pd.DataFrame(),
+            'is_jpsi_3pi' : pd.DataFrame(),
+            'is_jpsi_hc' : pd.DataFrame(),
         }
         
         '''
@@ -107,10 +259,10 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
         nFiles +=1
        
 
-        nf = NanoFrame(fname, )#branches = branches)
         for channel in channels:
             print("In channel "+channel)
             # Load the needed collections, NanoFrame is just an empty shell until we call the collections
+            nf = NanoFrame(fname, )#branches = branches)
             evt = nf['event']
             muons = nf['Muon']
             bcands = nf[channel]
@@ -124,7 +276,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                 continue
             bcands['l_xy_sig'] = bcands.l_xy / np.sqrt(bcands.l_xy_unc)
             bcands['pv'] = nf['PV']
-        
+            bcands['PV_npvsGood'] = nf['PV_npvsGood']
             
             #number of events processed
             nprocessedDataset += hlt.shape[0]
@@ -157,11 +309,11 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             # add gen info as a column of the muon
             if (dataset!=args.data):
                 #pile up weights only for mc
-                '''
+                
                 bcands['puWeight'] = nf['puWeight']
                 bcands['puWeightUp'] = nf['puWeightUp']
                 bcands['puWeightDown'] = nf['puWeightDown']
-                '''
+                
                 mu1['gen'] = gen[mu1.genPartIdx]
                 mu2['gen'] = gen[mu2.genPartIdx]
                 k['gen'] = gen[k.genPartIdx]
@@ -191,17 +343,24 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             if (dataset==args.mc_onia):
                 x_selection= ~ ((bcands.k.genPartIdx>=0) & ( bcands.mu1.genPartIdx>=0) & (bcands.mu2.genPartIdx>=0) & (abs(bcands.mu1.mother.pdgId) == 443) & (abs(bcands.mu2.mother.pdgId) == 443) & (abs(bcands.mu1.grandmother.pdgId) == 541) & (abs(bcands.mu2.grandmother.pdgId) == 541) & ( (abs(bcands.k.mother.pdgId)==541) | ( (abs(bcands.k.mother.pdgId)==15) & (abs(bcands.k.grandmother.pdgId)== 541))))
 
-            jpsi_tau_sel = (bcands.is_jpsi_tau == 1)
-            jpsi_mu_sel = (bcands.is_jpsi_mu == 1)
-            jpsi_pi_sel = (bcands.is_jpsi_pi == 1)
-            bcbkg_sel = ((bcands.is_psi2s_mu == 1) | (bcands.is_chic0_mu == 1) | (bcands.is_chic1_mu == 1) | (bcands.is_chic2_mu == 1) | (bcands.is_hc_mu ==1 ) | (bcands.is_psi2s_tau ==1) | (bcands.is_jpsi_3pi==1) | (bcands.is_jpsi_hc ==1))
-
-            
             if(dataset == args.mc_x):
-                flag_selection= [jpsi_tau_sel,jpsi_mu_sel,jpsi_pi_sel,bcbkg_sel]
-                flag_names = ['is_jpsi_tau','is_jpsi_mu','is_jpsi_pi','is_bcbkg']
+            
+                jpsi_tau_sel = (bcands.is_jpsi_tau == 1)
+                jpsi_mu_sel = (bcands.is_jpsi_mu == 1)
+                jpsi_pi_sel = (bcands.is_jpsi_pi == 1)
+                psi2s_mu_sel = (bcands.is_psi2s_mu == 1)
+                chic0_mu_sel = (bcands.is_chic0_mu == 1)
+                chic1_mu_sel = (bcands.is_chic1_mu == 1)
+                chic2_mu_sel = (bcands.is_chic2_mu == 1)
+                hc_mu_sel = (bcands.is_hc_mu == 1)
+                psi2s_tau_sel = (bcands.is_psi2s_tau == 1)
+                jpsi_3pi_sel = (bcands.is_jpsi_3pi == 1)
+                jpsi_hc_sel = (bcands.is_jpsi_hc == 1)
+
+                flag_selection= [jpsi_tau_sel,jpsi_mu_sel,jpsi_pi_sel,psi2s_mu_sel,chic0_mu_sel,chic1_mu_sel,chic2_mu_sel,hc_mu_sel,psi2s_tau_sel,jpsi_3pi_sel,jpsi_hc_sel]
+                flag_names = ['is_jpsi_tau','is_jpsi_mu','is_jpsi_pi','is_psi2s_mu','is_chic0_mu','is_chic1_mu','is_chic2_mu','is_hc_mu','is_psi2s_tau','is_jpsi_3pi','is_jpsi_hc']
             else:
-                flag_selection = [(bcands.pt>-99)]
+                flag_selection = [(bcands.p4.pt>-99)]
                 flag_names = ['ptmax']
             for selection,name in zip(flag_selection, flag_names):
                 best_pf_cand_pt = bcands[b_selection & x_selection & selection ].p4.pt.argmax() #B con pt massimo
@@ -257,14 +416,21 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['k_dxy_sig'] = tab.k.dxyS
                         df['k_dz_sig'] = tab.k.dzS
                         
-                    #Vertex properties
+                    #B Vertex properties
                     df['Blxy_sig'] = (tab.l_xy / tab.l_xy_unc)
                     df['Blxy'] = tab.l_xy
                     df['Blxy_unc'] = tab.l_xy_unc
                     df['Bsvprob'] = tab.svprob
                     df['Bcos2D'] = tab.cos2D
-                    df['Bchi2'] = tab.chi2
-                    # decay time! Muon vtrx info and PV info!!
+                    if (dataset== args.data or dataset== args.mc_x): #only because others dont have it for now
+                        df['Bchi2'] = tab.chi2
+
+                        #Jpsi vertex properties
+                        '''
+                        if(chan == 'BTommm'):
+                            df['jpsi_chi2'] = tab.jpsi_chi2
+                            df['jpsi_svprob'] = tab.jpsi_svprob
+                        '''
                     
                     df['mu1_vx'] = tab.mu1.vx
                     df['mu2_vx'] = tab.mu2.vx
@@ -283,7 +449,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['pv_y'] = tab.pv.y
                     df['pv_z'] = tab.pv.z
                     
-                    
+                    df['npv_good'] = tab.PV_npvsGood
                     #our variables
                     df['m_miss_sq'] = tab.m_miss_sq
                     df['Q_sq']=tab.Q_sq
@@ -336,7 +502,27 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['Bvtx_ex'] = tab.vtx_ex
                     df['Bvtx_ey'] = tab.vtx_ey
                     df['Bvtx_ez'] = tab.vtx_ez
-                    
+
+                    #fit values
+                    df['fit_Beta'] = tab.fit_eta
+                    df['fit_Bphi'] = tab.fit_phi
+                    df['fit_Bpt'] = tab.fit_pt
+                    df['fit_Bmass'] = tab.fit_mass
+
+                    df['fit_mu1_eta'] = tab.fit_l1_eta
+                    df['fit_mu1_phi'] = tab.fit_l1_phi
+                    df['fit_mu1_pt'] = tab.fit_l1_pt
+
+                    df['fit_mu2_eta'] = tab.fit_l2_eta
+                    df['fit_mu2_phi'] = tab.fit_l2_phi
+                    df['fit_mu2_pt'] = tab.fit_l2_pt
+
+                    df['fit_k_eta'] = tab.fit_k_eta
+                    df['fit_k_phi'] = tab.fit_k_phi
+                    df['fit_k_pt'] = tab.fit_k_pt
+
+                    df['fit_Bmass_err'] = tab.fit_massErr
+                    df['fit_Bcos2D'] = tab.fit_cos2D
                     
                     df['nB'] = sel.sum()[sel.sum() != 0]
                     
@@ -344,11 +530,11 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     if(dataset!=args.data):
                         
                         #PU weight
-                        '''
+                        
                         df['puWeight'] = tab.puWeight
                         df['puWeightUp'] = tab.puWeightUp
                         df['puWeightDown'] = tab.puWeightDown
-                        '''
+                        
                         #gen Part Flavour e gen Part Idx  -> if I need to access the gen info, this values tell me is it is a valid info or not
                         df['mu1_genPartFlav'] = tab.mu1.genPartFlav
                         df['mu2_genPartFlav'] = tab.mu2.genPartFlav
@@ -464,6 +650,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     
                         if(dataset == args.mc_x):
                             df['weightGen'] = tab.weightGen
+                            '''
                             if (name == 'is_bcbkg'):
                                 df['is_psi2s_mu'] = tab.is_psi2s_mu
                                 df['is_chic0_mu'] = tab.is_chic0_mu
@@ -473,8 +660,17 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                                 df['is_psi2s_tau'] = tab.is_psi2s_tau
                                 df['is_jpsi_3pi'] = tab.is_jpsi_3pi
                                 df['is_jpsi_hc'] = tab.is_jpsi_hc
-                
+                            '''
+                    if(dataset == args.mc_mu or dataset == args.mc_tau or dataset == args.mc_x):
+                        df = lifetime_weight(df, fake = False)
+                    else:
+                        df = lifetime_weight(df)
+                    df = jpsi_branches(df)
+                    df = DR_jpsimu(df)
+                    df = decaytime(df)
+                        
                     #print("Finito di processare la flag ",name, " la concateno a quella totale.")
+                    
                     if(channel=='BTommm'):
                         final_dfs_mmm[name] = pd.concat((final_dfs_mmm[name], dfs[name])) # da scrievre esplicito?
                     elif(channel == 'BTopmm'):
@@ -500,7 +696,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             elif (channel == 'BTokmm'):
                 final_dfs_kmm[flag].to_root('HOOK_FILE_OUT'+'_'+flag+'.root', key=channel, mode = 'a')
 
-        print("Saved "+ 'HOOK_FILE_OUT'+'_'+flag+'.root''.root')
+        print("Saved file "+ 'HOOK_FILE_OUT'+'_'+flag+'.root')
 
 
 print('DONE! Processed events: ', nprocessedAll)

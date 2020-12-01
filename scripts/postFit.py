@@ -6,7 +6,7 @@ from variable import variable
 from makePlot import makeSinglePlot
 from makePlot import makeStack
 from sample import sample_coll
-from create_datacard import create_datacard_5
+#from create_datacard import create_datacard_5
 ROOT.gROOT.SetBatch()
 
 weight = True
@@ -14,16 +14,19 @@ asimov = False
 PassFail = True
 # file with input histos name from bash
 #f=ROOT.TFile("/work/friti/new/CMSSW_10_2_15/src/HiggsAnalysis/PassFail/prova/fitDiagnostics.root","r")
-f=ROOT.TFile("/work/friti/new/CMSSW_10_2_15/src/HiggsAnalysis/fit29JulyPassFail/fitDiagnostics.root","r")
+f=ROOT.TFile("/work/friti/new/CMSSW_10_2_15/src/HiggsAnalysis/Q_sq_2020Nov02_cut04/fitDiagnostics.root","r")
 
-#var = variable("Q_sq", "Q_sq", "Q^{2}", "[GeV]", 10, 7, 10)
-var = variable("pt_miss", "pt_miss", "p_{T}^{miss}", "[GeV]", 15, 0, 20)
-#var = variable("tau", "tau", "prob_{#tau}", "", 10, 0, 1)
+var = variable("Q_sq", "Q_sq", "Q^{2}", "[GeV]", 12, 1, 10)
+#var = variable("pt_miss", "pt_miss", "p_{T}^{miss}", "[GeV]", 15, 0, 20)
+#var = variable("tau", "tau", "prob_{#tau}", "", 10, 0, 0.7)
+#var = variable("BE_mu_star","E_{#mu}^{*}","E_{#mu}^{*}","[GeV]",12,0.2,2.2)
+#var = variable("m_miss_sq", "m_miss_sq", "m_{miss}^2", "[GeV^{2}]",10,0,9)
+
 #var = variable("toy", "toy", "toy", "", 2, 0, 2)
-#var = variable("Bmass", "Bmass", "mass_{B}", "[GeV]", 15, 3.5, 9)
-
+#var = variable("Bmass","m(3#mu)","m(3#mu)","[GeV]",10,3,7)
+#var = variable("Bmass","m(3#mu)","m(3#mu)","[GeV]",10,3,13)
 if not PassFail:
-    his_m = f.Get("shapes_fit_s/rjpsi/mc_mu")
+    his_m = f.Get("shapes_fit_s/control/mc_mu")
     histo_m = ROOT.TH1F("mc_mu","mc_mu", var.nbins, var.xmin, var.xmax)
     for i in range(1,his_m.GetNbinsX()+1):
         histo_m.SetBinContent(i,his_m.GetBinContent(i))
@@ -32,7 +35,7 @@ if not PassFail:
     makeSinglePlot(histo_m, var, sample_coll[0])
 
 
-    his_t = f.Get("shapes_fit_s/rjpsi/mc_tau")
+    his_t = f.Get("shapes_fit_s/control/mc_tau")
     histo_t = ROOT.TH1F("mc_tau","mc_tau", var.nbins, var.xmin, var.xmax)
     for i in range(1,his_t.GetNbinsX()+1):
         histo_t.SetBinContent(i,his_t.GetBinContent(i))
@@ -41,7 +44,7 @@ if not PassFail:
     print("tau",histo_t.Integral())
     makeSinglePlot(histo_t, var, sample_coll[1])
 
-    his_x = f.Get("shapes_fit_s/rjpsi/mis_id")
+    his_x = f.Get("shapes_fit_s/control/mis_id")
     histo_x = ROOT.TH1F("mis_id","mis_id", var.nbins,var.xmin, var.xmax)
     for i in range(1,his_x.GetNbinsX()+1):
         histo_x.SetBinContent(i,his_x.GetBinContent(i))
@@ -51,7 +54,7 @@ if not PassFail:
     makeSinglePlot(histo_x, var, sample_coll[2])
 
 
-    his_d = f.Get("shapes_fit_s/rjpsi/data")
+    his_d = f.Get("shapes_fit_s/control/data")
     histo_d = ROOT.TH1F("data","data_obs", var.nbins, var.xmin, var.xmax)
     for i in range(0,his_d.GetN()):
         histo_d.SetBinContent(i+1,his_d.GetPointY(i))
@@ -60,7 +63,7 @@ if not PassFail:
     makeSinglePlot(histo_d, var, sample_coll[-1])
 
 
-    his_c=f.Get("shapes_fit_s/rjpsi/mc_comb")
+    his_c=f.Get("shapes_fit_s/control/mc_comb")
     histo_c= ROOT.TH1F("mc_comb","mc_comb", var.nbins, var.xmin, var.xmax)
     for i in range(1,his_c.GetNbinsX()+1):
         histo_c.SetBinContent(i,his_c.GetBinContent(i))
@@ -70,7 +73,7 @@ if not PassFail:
 
 
     print("comb",histo_c.Integral())
-    makeStack(histo_d,[histo_m, histo_t, histo_x, histo_c], var, fit=False)
+    makeStack(histo_d,[histo_m, histo_t, histo_x, histo_c], var, path = 'fitPlt',fit=False)
 
 
 
@@ -115,6 +118,7 @@ if PassFail:
             histo_m.SetBinContent(i,his_m.GetBinContent(i))
             histo_m.SetBinError(i,his_m.GetBinError(i))
         histo_m.Scale(scale)
+        print("INTEGRAL mu",histo_m.Integral())
         #        makeSinglePlot(histo_m, var, sample_coll[0], saveFile = False)
 
 
@@ -124,6 +128,7 @@ if PassFail:
             histo_t.SetBinContent(i,his_t.GetBinContent(i))
             histo_t.SetBinError(i,his_t.GetBinError(i))
         histo_t.Scale(scale)
+        print("INTEGRAL tau",histo_t.Integral())
 
         #makeSinglePlot(histo_t, var, sample_coll[1], saveFile = False)
 
@@ -134,7 +139,7 @@ if PassFail:
             histo_x.SetBinError(i,his_x.GetBinError(i))
             print(i,histo_x.GetBinContent(i))
         histo_x.Scale(scale)
-
+        
         #makeSinglePlot(histo_x, var, sample_coll[2], saveFile = False)
         print("misid int:",histo_x.Integral())
 
@@ -154,12 +159,13 @@ if PassFail:
             histo_c.SetBinContent(i,his_c.GetBinContent(i))
             histo_c.SetBinError(i,his_c.GetBinError(i))
         histo_c.Scale(scale)
+        print("comb",histo_c.Integral())
 
         #makeSinglePlot(histo_c, var, sample_coll[3], saveFile = False)
 
 
-        print("mis id:",histo_x.Integral())
-        makeStack(histo_d,[histo_m, histo_t, histo_x, histo_c], var, fit=True, addFileName = directoryName)
+
+        makeStack(histo_d,[histo_m, histo_t, histo_x, histo_c], var, path = 'fitPlt',fit=True, addFileName = directoryName)
         '''
         his_m = f.Get("shapes_fit_s/" + directoryName + "/sig")
         histo_m = ROOT.TH1F("mc_mu","mc_mu", var.nbins, var.xmin, var.xmax)

@@ -4,10 +4,12 @@ import sys
 
 dataset_dict = {'BcToJpsiMuNu':['--mc_mu /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/BcToJpsiMuNu_files_path.txt'],
                 'BcToJpsiTauNu':['--mc_tau /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/BcToJpsiTauNu_files_path.txt'],
-                'OniaX':['--mc_x /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018/OniaX_files_path.txt'],
-                'data':['--data /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/data_files_path_pichannel.txt']}
+                'OniaX':['--mc_onia /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018/OniaX_files_path.txt'],
+                'data':['--data /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/data_files_path_17Nov.txt'],
+                'BcToXToJpsi':['--mc_x /work/friti/new/CMSSW_10_2_15/src/pyrk/scripts/pathFiles/nanoAOD/Run2018UL/BcToXToJpsi_files_path.txt']
+}
 
-dataset = 'data'
+dataset = 'BcToXToJpsi'
 dataset_opt = dataset_dict[dataset][0]
 
 #splitting of files
@@ -53,6 +55,31 @@ if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir):
 else:
     sys.exit("WARNING: the folder "+ out_dir + " already exists in the SE!")
 
+if ("BcToXToJpsi") in dataset:
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_hc_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_hc_mu")
+
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_chic0_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_chic0_mu")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_chic1_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_chic1_mu")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_chic2_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_chic2_mu")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_jpsi_3pi"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_jpsi_3pi")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_jpsi_hc"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_jpsi_hc")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_jpsi_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_jpsi_mu")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_jpsi_pi"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_jpsi_pi")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_jpsi_tau"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_jpsi_tau")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_psi2s_mu"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_psi2s_mu")
+    if not os.path.exists('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir+ "/is_psi2s_tau"):
+        os.makedirs('/pnfs/psi.ch/cms/trivcat/store/user/friti/' +out_dir + "/is_psi2s_tau")
+
 for ijob in range(njobs):
 
     #input file
@@ -71,24 +98,70 @@ for ijob in range(njobs):
     fin.close()
 
     flauncher = open("%s/submitter_chunk%d.sh" %(out_dir, ijob), "wt")
-    flauncher.write(
-'''#!/bin/bash
-cd {dir}
-#scramv1 runtime -sh
-mkdir -p /scratch/friti/{scratch_dir}
-ls /scratch/friti/
-python {cfg} {option}
-ls /scratch/friti/{scratch_dir}
-xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/.
-rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root
+    if not ("BcToXToJpsi") in dataset:
+        flauncher.write(
+            '''#!/bin/bash
+            cd {dir}
+            #scramv1 runtime -sh
+            mkdir -p /scratch/friti/{scratch_dir}
+            ls /scratch/friti/
+            python {cfg} {option}
+            ls /scratch/friti/{scratch_dir}
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}.root
+            
+            '''.format(dir='/'.join([os.getcwd(), out_dir]), scratch_dir= dataset, cfg='Resonant_Rjpsi_chunk%d.py' %(ijob), option= dataset_opt, dat = dataset,ijob=ijob, se_dir=out_dir)
+        )
+    else:
+        flauncher.write(
+            '''#!/bin/bash
+            cd {dir}
+            #scramv1 runtime -sh
+            mkdir -p /scratch/friti/{scratch_dir}
+            ls /scratch/friti/
+            python {cfg} {option}
+            ls /scratch/friti/{scratch_dir}
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic0_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_chic0_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic0_mu.root
 
-'''.format(dir='/'.join([os.getcwd(), out_dir]), scratch_dir= dataset, cfg='Resonant_Rjpsi_chunk%d.py' %(ijob), option= dataset_opt, dat = dataset,ijob=ijob, se_dir=out_dir)
-    )
-    flauncher.close()
-    
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic1_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_chic1_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic1_mu.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic2_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_chic2_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_chic2_mu.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_hc_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_hc_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_hc_mu.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_3pi.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_jpsi_3pi/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_3pi.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_hc.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_jpsi_hc/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_hc.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_jpsi_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_mu.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_pi.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_jpsi_pi/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_pi.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_tau.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_jpsi_tau/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_jpsi_tau.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_psi2s_mu.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_psi2s_mu/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_psi2s_mu.root
+
+            xrdcp /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_is_psi2s_tau.root root://t3dcachedb.psi.ch:1094///pnfs/psi.ch/cms/trivcat/store/user/friti/{se_dir}/is_psi2s_tau/.
+            rm /scratch/friti/{scratch_dir}/{dat}_UL_{ijob}_psi2s_tau.root
+
+
+            
+            '''.format(dir='/'.join([os.getcwd(), out_dir]), scratch_dir= dataset, cfg='Resonant_Rjpsi_chunk%d.py' %(ijob), option= dataset_opt, dat = dataset,ijob=ijob, se_dir=out_dir)
+        )
+        
+        flauncher.close()
+        
     command_sh_batch = 'sbatch -p quick --account=t3 -o %s/logs/chunk%d.log -e %s/errs/chunk%d.err --job-name=%s --time=60 --mem=6GB %s/submitter_chunk%d.sh' %(out_dir, ijob, out_dir, ijob, out_dir, out_dir, ijob)
 
     os.system(command_sh_batch)
-    
-    
     

@@ -8,21 +8,22 @@ import math
 #in input:
 #histo data, array of histos of mc, class var,  
 
-def makeComparison(mch_tmp, var, addFile = ""):
-    order = ["mc_mu", "mc_tau", "mis_id", "mc_comb"]
+def makeComparison(mch_tmp, var,path, addFile = ""):
+    order = ["mu", "tau", "mis_id", "comb"]
     his = [histo for i,name in enumerate(order) for histo in mch_tmp if histo.GetName() == name ]
     sm = [i for i,name in enumerate(order) for histo in mch_tmp if histo.GetName() == name ]
-    
+    names = [name for i,name in enumerate(order) for histo in mch_tmp if histo.GetName() == name ]
+
     print(his)
     if(len(his) != len(mch_tmp)):
         print("ERROR: Problem in histos names!")
         return 0
     
     maxy = []
-    for i,histo in zip(sm,his):
+    for i,histo,sname in zip(sm,his,names):
         print(i,histo)
         histo.SetFillColor(0)
-        histo.SetLineColor(sample_coll[i].color)
+        histo.SetLineColor(sample_dic[sname].color)
         histo.GetXaxis().SetRangeUser(var.xmin,var.xmax)
         histo.Scale(1/histo.Integral()) #drawnormalized
         maxy.append(histo.GetMaximum())
@@ -33,8 +34,8 @@ def makeComparison(mch_tmp, var, addFile = ""):
 
     #legend
     legend = ROOT.TLegend(0.47,0.70,0.80,0.86)
-    for i,histo in zip(sm,his):
-        legend.AddEntry(histo, sample_coll[i].legendName, "f")
+    for i,histo,sname in zip(sm,his,names):
+        legend.AddEntry(histo, sample_dic[sname].legendName, "f")
     legend.SetTextFont(43)
     legend.SetTextSize(15)
     legend.SetBorderSize(0)
@@ -77,9 +78,9 @@ def makeComparison(mch_tmp, var, addFile = ""):
     CMS_lumi(c, 4, 1)
     c.RedrawAxis()
 
-    folder = "pngPlots/"
-    c.SaveAs(folder + var.name + "_comparison_"   + addFile + ".png")
-    c.SaveAs(folder + var.name + "_comparison_"  + addFile + ".pdf")
+    folder = path
+    c.SaveAs(folder +"BDT_output/"+ var.name + "_comparison_"   + addFile + ".png")
+    c.SaveAs(folder + "BDT_output/"+ var.name + "_comparison_"  + addFile + ".pdf")
     
 
 
@@ -378,10 +379,11 @@ def makeStack_old(datah, mch_tmp, var, path , fit=False,  addFileName = "", root
         ratio_pad.Delete()
         c.Delete()
 
-def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile = False, ratioPad = True, over = False):
+def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile = False, ratioPad = True, over = False,rootPath = "rootFiles"):
     os.system('set LD_PRELOAD=libtcmalloc.so')
     ROOT.gROOT.SetBatch()
-    order = ['mu','tau','chic0','chic1','chic2','hc_mu','jpsi_hc','psi2s_mu','psi2s_tau','comb','mis_id']
+    #order = ['mu','tau','chic0','chic1','chic2','hc_mu','jpsi_hc','psi2s_mu','psi2s_tau','comb','mis_id']
+    order = ['mu','tau','chic0','chic1','chic2','hc_mu','jpsi_hc','psi2s_mu','comb','mis_id']
     #    order = ["mc_mu", "mc_tau", "mis_id", "mc_comb"]
     his = [histo for i,name in enumerate(order) for histo in mch_tmp if histo.GetName() == name ]
     sm = [i for i,name in enumerate(order) for histo in mch_tmp if histo.GetName() == name ]
@@ -423,7 +425,7 @@ def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile
     maximum = max(datah.GetMaximum(), stack.GetMaximum())
     stack.SetMaximum(maximum*1.5)
     stack.SetMinimum(0.)
-
+    print("INTEGRALE DATA",datah.Integral())
     #legend
     legend = ROOT.TLegend(0.18,0.70,0.85,0.86)
     legend.SetNColumns(3);
@@ -588,7 +590,7 @@ def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile
         main_pad.Update()
 
     if (rootFile == True):
-        f = ROOT.TFile.Open("rootFiles/"+ var.name + addFileName +  ".root", "RECREATE")
+        f = ROOT.TFile.Open(rootPath+"/"+ var.name + addFileName +  ".root", "RECREATE")
         f.cd()
         for h in his:
             h.Write()
@@ -596,9 +598,9 @@ def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile
         
         datah.Write()
         f.Close()
-        print("Saved rootFiles/"+ var.name + addFileName +  ".root")
+        print("Saved "+rootPath+"/"+ var.name + addFileName +  ".root")
     if fit:
-        folder = "fitPlt/"
+        folder = path + "/"
     else:
         folder = path + "/"
 

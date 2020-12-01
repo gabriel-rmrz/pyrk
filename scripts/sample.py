@@ -27,8 +27,9 @@ comb = sample("comb", "comb", "comb J/#psi + #mu", ROOT.TColor.GetColorPalette(i
 data = sample("data", "data_obs", "data", ROOT.kBlack)
 
 #missing jpsi_3pi!
-
-sample_collection = [mu, tau,chic0,chic1,chic2,hc_mu,jpsi_hc,psi2s_mu,psi2s_tau, comb,  data,misid]
+#missing psi2s tau
+#sample_collection = [mu, tau,chic0,chic1,chic2,hc_mu,jpsi_hc,psi2s_mu,psi2s_tau, comb,  data,misid]
+sample_collection = [mu, tau,chic0,chic1,chic2,hc_mu,jpsi_hc,psi2s_mu, comb,  data,misid]
 
 sample_dic = {}
 

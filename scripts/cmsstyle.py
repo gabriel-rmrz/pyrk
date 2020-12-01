@@ -4,7 +4,8 @@ import ROOT as rt
 #   Initiated by: Gautier Hamel de Monchenault (Saclay)
 #   Translated in Python by: Joshua Hardenbrook (Princeton)
 
-def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  CMS", extraText = '  Preliminary', 
+#def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  CMS", extraText = '  Preliminary', 
+def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  ", extraText = '  ', 
              lumi_13TeV = "2018, L = 59.7 fb^{-1}", lumi_8TeV  = "19.7 fb^{-1}", lumi_7TeV  = "5.1 fb^{-1}"):
 
     cmsText = cmsText
