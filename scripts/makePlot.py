@@ -33,7 +33,7 @@ def makeComparison(mch_tmp, var,path, addFile = ""):
     his[0].SetMinimum(0.)
 
     #legend
-    legend = ROOT.TLegend(0.47,0.70,0.80,0.86)
+    legend = ROOT.TLegend(0.57,0.70,0.90,0.86)
     for i,histo,sname in zip(sm,his,names):
         legend.AddEntry(histo, sample_dic[sname].legendName, "f")
     legend.SetTextFont(43)
@@ -427,7 +427,7 @@ def makeStack(datah, mch_tmp, var, path , fit=False,  addFileName = "", rootFile
     stack.SetMinimum(0.)
     print("INTEGRALE DATA",datah.Integral())
     #legend
-    legend = ROOT.TLegend(0.18,0.70,0.85,0.86)
+    legend = ROOT.TLegend(0.18,0.65,0.85,0.81)
     legend.SetNColumns(3);
     legend.AddEntry(datah, sample_dic["data"].legendName, "lp")
     for histo,sname in zip(his,order):

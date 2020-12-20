@@ -10,19 +10,19 @@ import os
 #from create_datacard import create_datacard_5
 ROOT.gROOT.SetBatch()
 
-flag = 'v2'
+flag = 'v3'
 weight = False
-saveonwww = True
+saveonwww = False
 cutStr = '04'
 # file with input histos name from bash
-path_combine = "/work/friti/combine/CMSSW_10_2_13/src/HiggsAnalysis/CombinedLimit/Q_sq_2020Dec01_cut04/"
+path_combine = "/work/friti/combine/CMSSW_10_2_13/src/HiggsAnalysis/CombinedLimit/Q_sq_2020Dec13_cut04/"
 f=ROOT.TFile(path_combine+"fitDiagnostics.root","r")
 
-var = variable("Q_sq", "Q_sq", "Q^{2}", "[GeV]", 15, 3, 8)
+var = variable("Q_sq", "Q_sq", "Q^{2}", "[GeV]", 15, 3, 11)
 #var = variable("pt_miss", "pt_miss", "p_{T}^{miss}", "[GeV]", 15, 0, 20)
 #var = variable("tau", "tau", "prob_{#tau}", "", 10, 0, 0.7)
 #var = variable("BE_mu_star","E_{#mu}^{*}","E_{#mu}^{*}","[GeV]",12,0.2,2.2)
-#var = variable("m_miss_sq", "m_miss_sq", "m_{miss}^2", "[GeV^{2}]",10,0,9)
+#var = variable("m_miss_sq", "m_miss_sq", "m_{miss}^2", "[GeV^{2}]",10,0,3.5)
 
 #var = variable("toy", "toy", "toy", "", 2, 0, 2)
 #var = variable("Bmass","m(3#mu)","m(3#mu)","[GeV]",10,3,7)

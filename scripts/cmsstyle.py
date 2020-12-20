@@ -4,8 +4,9 @@ import ROOT as rt
 #   Initiated by: Gautier Hamel de Monchenault (Saclay)
 #   Translated in Python by: Joshua Hardenbrook (Princeton)
 
-#def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  CMS", extraText = '  Preliminary', 
-def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  ", extraText = '  ', 
+def CMS_lumi(pad, iPeriod, iPosX, cmsText = "CMS", extraText = 'Preliminary', writeInline = True,
+#def CMS_lumi(pad, iPeriod, iPosX, cmsText = "   CMS", extraText = '   Preliminary', 
+#def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  ", extraText = '  ', 
              lumi_13TeV = "2018, L = 59.7 fb^{-1}", lumi_8TeV  = "19.7 fb^{-1}", lumi_7TeV  = "5.1 fb^{-1}"):
 
     cmsText = cmsText
@@ -143,12 +144,15 @@ def CMS_lumi(pad, iPeriod, iPosX, cmsText = "  ", extraText = '  ',
             latex.SetTextFont(cmsTextFont)
             latex.SetTextSize(cmsTextSize*t)
             latex.SetTextAlign(align_)
-            latex.DrawLatex(posX_, posY_, cmsText)
+            latex.DrawLatex(posX_, posY_ - 0.01, cmsText)
             if( writeExtraText ) :
                 latex.SetTextFont(extraTextFont)
                 latex.SetTextAlign(align_)
                 latex.SetTextSize(extraTextSize*t)
-                latex.DrawLatex(posX_, posY_- relExtraDY*cmsTextSize*t, extraText)
+                if(writeInline):
+                    latex.DrawLatex(posX_ + cmsTextSize * l * 2.2, posY_ -0.01, extraText)
+                else:
+                    latex.DrawLatex(posX_, posY_- relExtraDY*cmsTextSize*t, extraText)
     elif( writeExtraText ):
         if( iPosX==0):
             posX_ =   l +  relPosX*(1-l-r)
