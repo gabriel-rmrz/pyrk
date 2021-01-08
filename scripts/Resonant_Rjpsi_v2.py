@@ -22,8 +22,8 @@ from scipy.constants import c as speed_of_light
 maxEvents = -1
 checkDoubles = True
 
-nMaxFiles = HOOK_MAX_FILES
-skipFiles = HOOK_SKIP_FILES
+nMaxFiles = 2
+skipFiles = 0
 
 
 ## lifetime weights ##
@@ -155,7 +155,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
     print(" ")
     
     #    if (dataset == args.data or dataset == args.mc_x ):
-    channels = ['BTommm','BTopmm','BTokmm','BTo2mu3pi']
+    channels = ['BTo3Mu','BTo2MuP','BTo2MuK','BTo2Mu3P']
     
     '''else:
         channels =['BTommm']
@@ -290,39 +290,53 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             bcands['run'] = nf['run']
             bcands['luminosityBlock'] = nf['luminosityBlock']    
             if(len(nf[channel]) == 0):
-                print("Empty file! Check why?")
+                print("Empty channel!")
                 continue
             bcands['l_xy_sig'] = bcands.bodies3_l_xy / np.sqrt(bcands.bodies3_l_xy_unc)
-            bcands['pv'] = nf['PV']
-            bcands['PV_npvsGood'] = nf['PV_npvsGood']
-            
+            #bcands['pv'] = nf['PV']
+            # NEED to ADD THIS
+            #bcands['PV_npvsGood'] = nf['PV_npvsGood']
+            if(dataset == args.mc_x):
+                bcands['is_jpsi_tau'] = nf['DecayFlag_is_jpsi_tau']
+                bcands['is_jpsi_mu'] = nf['DecayFlag_is_jpsi_mu']
+                bcands['is_jpsi_pi'] = nf['DecayFlag_is_jpsi_pi']
+                bcands['is_psi2s_mu'] = nf['DecayFlag_is_psi2s_mu']
+                bcands['is_psi2s_tau'] = nf['DecayFlag_is_psi2s_tau']
+                bcands['is_chic0_mu'] = nf['DecayFlag_is_chic0_mu']
+                bcands['is_chic1_mu'] = nf['DecayFlag_is_chic1_mu']
+                bcands['is_chic2_mu'] = nf['DecayFlag_is_chic2_mu']
+                bcands['is_hc_mu'] = nf['DecayFlag_is_hc_mu']
+                bcands['is_jpsi_3pi'] = nf['DecayFlag_is_jpsi_3pi']
+                bcands['is_jpsi_hc'] = nf['DecayFlag_is_jpsi_hc']
+
+
             #number of events processed
             nprocessedDataset += hlt.shape[0]
             nprocessedAll+=hlt.shape[0]
 
             #add muon infos        
-            mu1 = JaggedCandidateArray.zip({n: muons[bcands['l1Idx']][n] for n in muons[bcands['l1Idx']].columns})
-            mu2 = JaggedCandidateArray.zip({n: muons[bcands['l2Idx']][n] for n in muons[bcands['l2Idx']].columns})
-            if channel == 'BTommm':
+            mu1 = JaggedCandidateArray.zip({n: muons[bcands['mu1Idx']][n] for n in muons[bcands['mu1Idx']].columns})
+            mu2 = JaggedCandidateArray.zip({n: muons[bcands['mu2Idx']][n] for n in muons[bcands['mu2Idx']].columns})
+            if channel == 'BTo3Mu':
                 k = JaggedCandidateArray.zip({n: muons[bcands['kIdx']][n] for n in muons[bcands['kIdx']].columns})
      
             else:
                 tracks = nf['ProbeTracks']
-                if channel == 'BTo2mu3pi':
+                if channel == 'BTo2Mu3P':
                     pi1 = JaggedCandidateArray.zip({n: tracks[bcands['pi1Idx']][n] for n in tracks[bcands['pi1Idx']].columns})
                     pi2 = JaggedCandidateArray.zip({n: tracks[bcands['pi2Idx']][n] for n in tracks[bcands['pi2Idx']].columns})
                     pi3 = JaggedCandidateArray.zip({n: tracks[bcands['pi3Idx']][n] for n in tracks[bcands['pi3Idx']].columns})
-                if channel == 'BTopmm' or channel == 'BTokmm':
+                if channel == 'BTo2MuP' or channel == 'BTo2MuK':
                     k = JaggedCandidateArray.zip({n: tracks[bcands['kIdx']][n] for n in tracks[bcands['kIdx']].columns})
                 
 
             # the MC ONia needs a specific treatment for gen, because there are cases in which thegen collection is zero! And in these cases we can not directly add the gen branch to the muons branch. So, consdiering that to use the MC Onia we need an additional requirement: that the third muon iha pdgId==+-13, we can mask the events in which k.genPrtIdx==-1
-            if(dataset==args.mc_onia and channel!='BTo2mu3pi'):
+            if(dataset==args.mc_onia and channel!='BTo2Mu3P'):
                 mask = (k.genPartIdx != -1)
                 mu1_new = mu1[mask]
                 mu2_new = mu2[mask]
                 k_new = k[mask]
-                '''if(channel == 'BTo2mu3pi'):
+                '''if(channel == 'BTo2Mu3P'):
                     pi1_new = pi1[mask]                    
                     pi2_new = pi2[mask]                    
                     pi3_new = pi3[mask]                    
@@ -331,7 +345,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                 '''
                 mu1 = JaggedCandidateArray.zip({n: mu1_new[n] for n in mu1_new.columns})
                 mu2 = JaggedCandidateArray.zip({n: mu2_new[n] for n in mu2_new.columns})
-                '''if(channel == 'BTo2mu3pi'):
+                '''if(channel == 'BTo2Mu3P'):
                     pi1 = JaggedCandidateArray.zip({n: pi1_new[n] for n in pi1_new.columns})
                     pi2 = JaggedCandidateArray.zip({n: pi2_new[n] for n in pi2_new.columns})
                     pi3 = JaggedCandidateArray.zip({n: pi3_new[n] for n in pi3_new.columns})
@@ -346,9 +360,9 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             if (dataset!=args.data):
                 #pile up weights only for mc
                 
-                bcands['puWeight'] = nf['puWeight']
-                bcands['puWeightUp'] = nf['puWeightUp']
-                bcands['puWeightDown'] = nf['puWeightDown']
+                #bcands['puWeight'] = nf['puWeight']
+                #bcands['puWeightUp'] = nf['puWeightUp']
+                #bcands['puWeightDown'] = nf['puWeightDown']
                 
                 mu1['gen'] = gen[mu1.genPartIdx]
                 mu2['gen'] = gen[mu2.genPartIdx]
@@ -358,7 +372,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                
                 mu1['grandmother'] = gen[gen[gen[mu1.genPartIdx].genPartIdxMother].genPartIdxMother]
                 mu2['grandmother'] = gen[gen[gen[mu2.genPartIdx].genPartIdxMother].genPartIdxMother]
-                if(channel == 'BTo2mu3pi'):
+                if(channel == 'BTo2Mu3P'):
                     pi1['gen'] = gen[pi1.genPartIdx]
                     pi2['gen'] = gen[pi2.genPartIdx]
                     pi3['gen'] = gen[pi3.genPartIdx]
@@ -376,7 +390,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                 if (dataset!=args.mc_mu):
                     mu1['grandgrandmother'] =gen[gen[gen[gen[mu1.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]
                     mu2['grandgrandmother'] =gen[gen[gen[gen[mu2.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]
-                    if(channel == 'BTo2mu3pi'):
+                    if(channel == 'BTo2Mu3P'):
                         pi1['grandgrandmother'] =gen[gen[gen[gen[pi1.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
                         pi2['grandgrandmother'] =gen[gen[gen[gen[pi2.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
                         pi3['grandgrandmother'] =gen[gen[gen[gen[pi3.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
@@ -386,7 +400,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
 
             bcands['mu1']= mu1
             bcands['mu2'] = mu2
-            if(channel == 'BTo2mu3pi'):
+            if(channel == 'BTo2Mu3P'):
                 bcands['pi1'] = pi1
                 bcands['pi2'] = pi2
                 bcands['pi3'] = pi3
@@ -399,7 +413,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
         
             #Delete the signal from the JpsiX MC
             if (dataset==args.mc_onia):
-                if(channel == 'BTo2mu3pi'):
+                if(channel == 'BTo2Mu3P'):
                     x_selection= ~ ((bcands.pi1.genPartIdx>=0) & ( bcands.mu1.genPartIdx>=0) & (bcands.mu2.genPartIdx>=0) & (abs(bcands.mu1.mother.pdgId) == 443) & (abs(bcands.mu2.mother.pdgId) == 443) & (abs(bcands.pi1.grandmother.pdgId) == 541) & (abs(bcands.mu2.grandmother.pdgId) == 541) & ( (abs(bcands.pi1.mother.pdgId)==541) | ( (abs(bcands.pi1.mother.pdgId)==15) & (abs(bcands.pi1.grandmother.pdgId)== 541))))
 
                 else:
@@ -472,12 +486,12 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['bvtx_fit_pt'] = tab.bodies3_fit_pt
                     df['bvtx_fit_eta'] = tab.bodies3_fit_eta
                     df['bvtx_fit_phi'] = tab.bodies3_fit_phi
-                    df['bvtx_fit_l1_pt'] = tab.bodies3_fit_l1_pt
-                    df['bvtx_fit_l1_eta'] = tab.bodies3_fit_l1_eta
-                    df['bvtx_fit_l1_phi'] = tab.bodies3_fit_l1_phi
-                    df['bvtx_fit_l2_pt'] = tab.bodies3_fit_l2_pt
-                    df['bvtx_fit_l2_eta'] = tab.bodies3_fit_l2_pt
-                    df['bvtx_fit_l2_phi'] = tab.bodies3_fit_l2_pt
+                    df['bvtx_fit_mu1_pt'] = tab.bodies3_fit_mu1_pt
+                    df['bvtx_fit_mu1_eta'] = tab.bodies3_fit_mu1_eta
+                    df['bvtx_fit_mu1_phi'] = tab.bodies3_fit_mu1_phi
+                    df['bvtx_fit_mu2_pt'] = tab.bodies3_fit_mu2_pt
+                    df['bvtx_fit_mu2_eta'] = tab.bodies3_fit_mu2_pt
+                    df['bvtx_fit_mu2_phi'] = tab.bodies3_fit_mu2_pt
                     df['bvtx_fit_cos2D'] = tab.bodies3_fit_cos2D
 
                     #postfit 2 part vertex
@@ -486,21 +500,21 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['jpsivtx_fit_pt'] = tab.jpsivtx_fit_pt
                     df['jpsivtx_fit_eta'] = tab.jpsivtx_fit_eta
                     df['jpsivtx_fit_phi'] = tab.jpsivtx_fit_phi
-                    df['jpsivtx_fit_l1_pt'] = tab.jpsivtx_fit_l1_pt
-                    df['jpsivtx_fit_l1_eta'] = tab.jpsivtx_fit_l1_eta
-                    df['jpsivtx_fit_l1_phi'] = tab.jpsivtx_fit_l1_phi
-                    df['jpsivtx_fit_l2_pt'] = tab.jpsivtx_fit_l2_pt
-                    df['jpsivtx_fit_l2_eta'] = tab.jpsivtx_fit_l2_pt
-                    df['jpsivtx_fit_l2_phi'] = tab.jpsivtx_fit_l2_pt
+                    df['jpsivtx_fit_mu1_pt'] = tab.jpsivtx_fit_mu1_pt
+                    df['jpsivtx_fit_mu1_eta'] = tab.jpsivtx_fit_mu1_eta
+                    df['jpsivtx_fit_mu1_phi'] = tab.jpsivtx_fit_mu1_phi
+                    df['jpsivtx_fit_mu2_pt'] = tab.jpsivtx_fit_mu2_pt
+                    df['jpsivtx_fit_mu2_eta'] = tab.jpsivtx_fit_mu2_pt
+                    df['jpsivtx_fit_mu2_phi'] = tab.jpsivtx_fit_mu2_pt
                     df['jpsivtx_fit_cos2D'] = tab.jpsivtx_fit_cos2D
                 
                     #iso
                     df['b_iso03'] = tab.b_iso03
                     df['b_iso04'] = tab.b_iso04
-                    df['l1_iso03'] = tab.l1_iso03
-                    df['l1_iso04'] = tab.l1_iso04
-                    df['l2_iso03'] = tab.l2_iso03
-                    df['l2_iso04'] = tab.l2_iso04
+                    df['mu1_iso03'] = tab.mu1_iso03
+                    df['mu1_iso04'] = tab.mu1_iso04
+                    df['mu2_iso03'] = tab.mu2_iso03
+                    df['mu2_iso04'] = tab.mu2_iso04
               
                     #beamspot
                     df['beamspot_x'] = tab.beamspot_x
@@ -531,6 +545,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['Bphi'] = tab.p4.phi
                     df['Bpt_reco'] = (tab.p4.pt * 6.275 / tab.p4.mass)
                     
+                    '''
                     df['mu1_dxy'] = tab.mu1.dxy
                     df['mu2_dxy'] = tab.mu2.dxy
                     df['mu1_dxy_sig'] = tab.mu1.dxyErr
@@ -540,8 +555,9 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['mu2_dz'] = tab.mu2.dz
                     df['mu1_dz_sig'] = tab.mu1.dzErr
                     df['mu2_dz_sig'] = tab.mu2.dzErr             
-
+                    '''
                     #not very useful, now we have jpsi vertex coordinates
+                    '''
                     df['mu1_vx'] = tab.mu1.vx
                     df['mu2_vx'] = tab.mu2.vx
                                         
@@ -550,13 +566,13 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
 
                     df['mu1_vz'] = tab.mu1.vz
                     df['mu2_vz'] = tab.mu2.vz
-                    
+                    '''
                     #PV position
-                    df['pv_x'] = tab.pv.x
-                    df['pv_y'] = tab.pv.y
-                    df['pv_z'] = tab.pv.z
+                    df['pv_x'] = tab.pv_x
+                    df['pv_y'] = tab.pv_y
+                    df['pv_z'] = tab.pv_z
                     
-                    df['npv_good'] = tab.PV_npvsGood
+                    #df['npv_good'] = tab.PV_npvsGood
                                         
                     #IDs
                     df['mu1_mediumID']= tab.mu1.mediumId
@@ -566,7 +582,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['mu1_softID']= tab.mu1.softId
                     df['mu2_softID']= tab.mu2.softId
                     
-                    if(chan == 'BTommm'):
+                    if(chan == 'BTo3Mu'):
                         df['k_tightID']= tab.k.tightId
                         df['k_mediumID']=tab.k.mediumId
                         df['k_softID']=tab.k.softId
@@ -574,7 +590,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     #is PF ?
                     df['mu1_isPF'] = tab.mu1.isPFcand
                     df['mu2_isPF'] = tab.mu2.isPFcand
-                    if(chan == 'BTommm'):
+                    if(chan == 'BTo3Mu'):
                         df['k_isPF'] = tab.k.isPFcand
                         
                     #others
@@ -584,7 +600,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     
                     df['nB'] = sel.sum()[sel.sum() != 0]
 
-                    if(channel != 'BTo2mu3pi'):
+                    if(channel != 'BTo2Mu3P'):
                         df['E_mu_star']=tab.E_mu_star
                         df['E_mu_canc']=tab.E_mu_canc
                         df['k_iso03'] = tab.k_iso03
@@ -593,23 +609,24 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['bvtx_fit_k_phi'] = tab.bodies3_fit_k_phi
                         df['bvtx_fit_k_eta'] = tab.bodies3_fit_k_eta
                         
-                        if(chan == 'BTommm'):
+                        '''
+                        if(chan == 'BTo3Mu'):
                             df['k_dxy_sig'] = tab.k.dxyErr
                             df['k_dz_sig'] = tab.k.dzErr
                         else:
                             df['k_dxy_sig'] = tab.k.dxyS
                             df['k_dz_sig'] = tab.k.dzS
-                                            
+                        '''
                         df['kpt'] = tab.k.p4.pt
                         df['kmass'] = tab.k.p4.mass
                         df['kphi'] = tab.k.p4.phi
                         df['keta'] = tab.k.p4.eta
-                        df['k_dxy'] = tab.k.dxy
-                        df['k_dz'] = tab.k.dz
-                        df['k_vy'] = tab.k.vy
-                        df['k_vx'] = tab.k.vx
-                        df['k_vz'] = tab.k.vz
-
+                        #df['k_dxy'] = tab.k.dxy
+                        #                        df['k_dz'] = tab.k.dz
+                        '''                        df['k_vy'] = tab.k_vy
+                        df['k_vx'] = tab.k_vx
+                        df['k_vz'] = tab.k_vz
+                        '''
                     else:
                         df['pi1_iso03'] = tab.pi1_iso03
                         df['pi2_iso03'] = tab.pi2_iso03
@@ -628,7 +645,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['bvtx_fit_pi3_phi'] = tab.bodies3_fit_pi3_phi
 
                         #impact parameter
-                        df['pi1_dxy_sig'] = tab.pi1.dxyS
+                        '''df['pi1_dxy_sig'] = tab.pi1.dxyS
                         df['pi1_dz_sig'] = tab.pi1.dzS
                         df['pi1_dxy'] = tab.pi1.dxy
                         df['pi1_dz'] = tab.pi1.dz
@@ -640,7 +657,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['pi3_dz_sig'] = tab.pi3.dzS
                         df['pi3_dxy'] = tab.pi3.dxy
                         df['pi3_dz'] = tab.pi3.dz
-
+                        '''
                         df['pi1pt'] = tab.pi1.p4.pt
                         df['pi1mass'] = tab.pi1.p4.mass
                         df['pi1phi'] = tab.pi1.p4.phi
@@ -669,10 +686,10 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         
                         #PU weight
                         
-                        df['puWeight'] = tab.puWeight
+                        '''df['puWeight'] = tab.puWeight
                         df['puWeightUp'] = tab.puWeightUp
                         df['puWeightDown'] = tab.puWeightDown
-                        
+                        '''
                         #gen Part Flavour e gen Part Idx  -> if I need to access the gen info, this values tell me is it is a valid info or not
                         df['mu1_genPartFlav'] = tab.mu1.genPartFlav
                         df['mu2_genPartFlav'] = tab.mu2.genPartFlav
@@ -742,7 +759,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['mu2_grandmother_vz'] = tab.mu2.grandmother.vz
 
 
-                        if(channel != 'BTo2mu3pi'):
+                        if(channel != 'BTo2Mu3P'):
                             df['k_genpdgId'] = tab.k.gen.pdgId
                             df['k_pdgId'] = tab.k.pdgId
                             df['k_gen_vz'] = tab.k.gen.vz
@@ -861,7 +878,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                             df['mu1_grandgrandmother_vz'] = tab.mu1.grandgrandmother.vz
                             df['mu2_grandgrandmother_vz'] = tab.mu2.grandgrandmother.vz
 
-                            if(channel != 'BTo2mu3pi'):
+                            if(channel != 'BTo2Mu3P'):
                                 df['k_grandgrandmother_pdgId'] = tab.k.grandgrandmother.pdgId
                                 df['k_grandgrandmother_pt'] = tab.k.grandgrandmother.p4.pt
                                 df['k_grandgrandmother_eta'] = tab.k.grandgrandmother.p4.eta  
@@ -895,37 +912,25 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                                 df['pi3_grandgrandmother_vy'] = tab.pi3.grandgrandmother.vy
                                 df['pi3_grandgrandmother_vz'] = tab.pi3.grandgrandmother.vz
 
-                        if(dataset == args.mc_x):
-                            df['weightGen'] = tab.weightGen
-                            '''
-                            if (name == 'is_bcbkg'):
-                                df['is_psi2s_mu'] = tab.is_psi2s_mu
-                                df['is_chic0_mu'] = tab.is_chic0_mu
-                                df['is_chic1_mu'] = tab.is_chic1_mu
-                                df['is_chic2_mu'] = tab.is_chic2_mu
-                                df['is_hc_mu'] = tab.is_hc_mu
-                                df['is_psi2s_tau'] = tab.is_psi2s_tau
-                                df['is_jpsi_3pi'] = tab.is_jpsi_3pi
-                                df['is_jpsi_hc'] = tab.is_jpsi_hc
-                            '''
+                        
                     if(dataset == args.mc_mu or dataset == args.mc_tau or dataset == args.mc_x):
                         df = lifetime_weight(df, fake = False)
                     else:
                         df = lifetime_weight(df)
                     df = jpsi_branches(df)
-                    if channel != 'BTo2mu3pi':
+                    if channel != 'BTo2Mu3P':
                         df = DR_jpsimu(df)
                     df = decaytime(df)
                         
                     #print("Finito di processare la flag ",name, " la concateno a quella totale.")
                     
-                    if(channel=='BTommm'):
+                    if(channel=='BTo3Mu'):
                         final_dfs_mmm[name] = pd.concat((final_dfs_mmm[name], dfs[name])) # da scrievre esplicito?
-                    elif(channel == 'BTopmm'):
+                    elif(channel == 'BTo2MuP'):
                         final_dfs_pmm[name] = pd.concat((final_dfs_pmm[name], dfs[name])) # da scrievre esplicito
-                    elif(channel == 'BTokmm'):
+                    elif(channel == 'BTo2MuK'):
                         final_dfs_kmm[name] = pd.concat((final_dfs_kmm[name], dfs[name])) # da scrievre esplicito
-                    elif(channel == 'BTo2mu3pi'):
+                    elif(channel == 'BTo2Mu3P'):
                         final_dfs_2m3p[name] = pd.concat((final_dfs_2m3p[name], dfs[name])) # da scrievre esplicito
                     if(nprocessedDataset > maxEvents and maxEvents != -1):
                         break
@@ -939,16 +944,16 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
     
     for flag in flag_names:
         for channel in channels:
-            if channel == 'BTommm':
-                final_dfs_mmm[flag].to_root('HOOK_FILE_OUT'+'_'+flag+'.root', key=channel)
-            elif (channel == 'BTopmm'):
-                final_dfs_pmm[flag].to_root('HOOK_FILE_OUT'+'_'+flag+'.root', key=channel, mode = 'a')
-            elif (channel == 'BTokmm'):
-                final_dfs_kmm[flag].to_root('HOOK_FILE_OUT'+'_'+flag+'.root', key=channel, mode = 'a')
-            elif (channel == 'BTo2mu3pi'):
-                final_dfs_2m3p[flag].to_root('HOOK_FILE_OUT'+'_'+flag+'.root', key=channel, mode = 'a')
+            if channel == 'BTo3Mu':
+                final_dfs_mmm[flag].to_root('dataframes_local/'+d[0]+'_'+flag+adj+'.root', key=channel)
+            elif (channel == 'BTo2MuP'):
+                final_dfs_pmm[flag].to_root('dataframes_local/'+d[0]+'_'+flag+adj+'.root', key=channel, mode = 'a')
+            elif (channel == 'BTo2MuK'):
+                final_dfs_kmm[flag].to_root('dataframes_local/'+d[0]+'_'+flag+adj+'.root', key=channel, mode = 'a')
+            elif (channel == 'BTo2Mu3P'):
+                final_dfs_2m3p[flag].to_root('dataframes_local/'+d[0]+'_'+flag+adj+'.root', key=channel, mode = 'a')
 
-        print("Saved file "+ 'HOOK_FILE_OUT'+'_'+flag+'.root')
+        print("Saved file dataframes_local/"+ d[0]+'_'+flag+adj+'.root')
 
 
 print('DONE! Processed events: ', nprocessedAll)
