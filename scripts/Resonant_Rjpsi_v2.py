@@ -102,6 +102,20 @@ def lifetime_weight(pf, fake = True):
         return pf
 ## end lifetime weights ##
 
+def mcor(pf):
+    #https://cds.cern.ch/record/2697350/files/1910.13404.pdf
+    #only for bto3mu and bto2mutrk 
+    print("Adding mcor variable...")
+    b_dir_vec = TVector3Array(pf.jpsivtx_vtx_x - pf.pv_x,pf.jpsivtx_vtx_y - pf.pv_y,pf.jpsivtx_vtx_z - pf.pv_z )
+    b_dir = b_dir_vec/np.sqrt(b_dir_vec.mag2)
+    jpsimu_p4 = TLorentzVectorArray.from_ptetaphim(pf.Bpt,pf.Beta,pf.Bphi,pf.Bmass)
+    jpsimu_p3 = jpsimu_p4.p3
+    p_parallel = jpsimu_p3.dot(b_dir) 
+    p_perp = np.sqrt(jpsimu_p3.mag2 - p_parallel * p_parallel)
+    mcor = np.sqrt(pf.Bmass * pf.Bmass + p_perp* p_perp) + p_perp
+    pf['mcor'] = mcor
+    return pf
+
 def DR_jpsimu(pf):
     print("Adding DR between jpsi and mu branch...")
     mu1_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu1pt,pf.mu1eta,pf.mu1phi,pf.mu1mass)
@@ -134,16 +148,10 @@ def decaytime(pf):
     print("Adding decay time branch...")
     PV_pos = TVector3Array(pf.pv_x,pf.pv_y,pf.pv_z)
     jpsiVertex_pos = TVector3Array(pf.jpsivtx_vtx_x,pf.jpsivtx_vtx_y,pf.jpsivtx_vtx_z)
-    #    jpsiVertex_pos2 = TVector3Array(pf.mu2_vx,pf.mu2_vy,pf.mu2_vz)
-
     dist1 = (PV_pos - jpsiVertex_pos).mag
-    #    dist2 = (PV_pos - jpsiVertex_pos2).mag
-
     decay_time1 = dist1 * 6.276 / (pf.Bpt_reco * 2.998e+10)
-    #    decay_time2 = dist2 * 6.276 / (pf.Bpt_reco * 2.998e+10)
     #pf.copy()
     pf['decay_time'] = decay_time1
-    #    pf['decay_time2'] = decay_time2
     return pf
 
 
@@ -154,12 +162,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
         continue
     print(" ")
     
-    #    if (dataset == args.data or dataset == args.mc_x ):
     channels = ['BTo3Mu','BTo2MuP','BTo2MuK','BTo2Mu3P']
-    
-    '''else:
-        channels =['BTommm']
-    '''
     print("Opening file", dataset)
     f=open(dataset,"r")
     paths = f.readlines()
@@ -225,22 +228,6 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             'is_jpsi_hc' : pd.DataFrame(),
         }
         
-        '''
-        final_dfs_mmm['is_jpsi_mu']=None
-        final_dfs_mmm['is_jpsi_tau']=None
-        final_dfs_mmm['is_jpsi_pi']=None
-        final_dfs_mmm['is_bcbkg']=None
-        
-        final_dfs_pmm['is_jpsi_mu']=None
-        final_dfs_pmm['is_jpsi_tau']=None
-        final_dfs_pmm['is_jpsi_pi']=None
-        final_dfs_pmm['is_bcbkg']=None
-        
-        final_dfs_kmm['is_jpsi_mu']=None
-        final_dfs_kmm['is_jpsi_tau']=None
-        final_dfs_kmm['is_jpsi_pi']=None
-        final_dfs_kmm['is_bcbkg']=None
-        '''
     else:
         final_dfs_mmm = {
             'ptmax' : pd.DataFrame(),
@@ -295,7 +282,6 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             bcands['l_xy_sig'] = bcands.bodies3_l_xy / np.sqrt(bcands.bodies3_l_xy_unc)
             #bcands['pv'] = nf['PV']
             # NEED to ADD THIS
-            #bcands['PV_npvsGood'] = nf['PV_npvsGood']
             if(dataset == args.mc_x):
                 bcands['is_jpsi_tau'] = nf['DecayFlag_is_jpsi_tau']
                 bcands['is_jpsi_mu'] = nf['DecayFlag_is_jpsi_mu']
@@ -336,22 +322,8 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                 mu1_new = mu1[mask]
                 mu2_new = mu2[mask]
                 k_new = k[mask]
-                '''if(channel == 'BTo2Mu3P'):
-                    pi1_new = pi1[mask]                    
-                    pi2_new = pi2[mask]                    
-                    pi3_new = pi3[mask]                    
-                else:
-                    k_new = k[mask]
-                '''
                 mu1 = JaggedCandidateArray.zip({n: mu1_new[n] for n in mu1_new.columns})
                 mu2 = JaggedCandidateArray.zip({n: mu2_new[n] for n in mu2_new.columns})
-                '''if(channel == 'BTo2Mu3P'):
-                    pi1 = JaggedCandidateArray.zip({n: pi1_new[n] for n in pi1_new.columns})
-                    pi2 = JaggedCandidateArray.zip({n: pi2_new[n] for n in pi2_new.columns})
-                    pi3 = JaggedCandidateArray.zip({n: pi3_new[n] for n in pi3_new.columns})
-                else:
-                    k = JaggedCandidateArray.zip({n: k_new[n] for n in k_new.columns})
-                '''
                 k = JaggedCandidateArray.zip({n: k_new[n] for n in k_new.columns})
                 bcands = JaggedCandidateArray.zip({n: bcands[mask][n] for n in bcands[mask].columns})
 
@@ -359,11 +331,11 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
             # add gen info as a column of the muon
             if (dataset!=args.data):
                 #pile up weights only for mc
-                
-                #bcands['puWeight'] = nf['puWeight']
-                #bcands['puWeightUp'] = nf['puWeightUp']
-                #bcands['puWeightDown'] = nf['puWeightDown']
-                
+
+                bcands['puWeight'] = nf['puWeight']
+                bcands['puWeightUp'] = nf['puWeightUp']
+                bcands['puWeightDown'] = nf['puWeightDown']
+
                 mu1['gen'] = gen[mu1.genPartIdx]
                 mu2['gen'] = gen[mu2.genPartIdx]
                 
@@ -545,17 +517,18 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['Bphi'] = tab.p4.phi
                     df['Bpt_reco'] = (tab.p4.pt * 6.275 / tab.p4.mass)
                     
-                    '''
-                    df['mu1_dxy'] = tab.mu1.dxy
-                    df['mu2_dxy'] = tab.mu2.dxy
-                    df['mu1_dxy_sig'] = tab.mu1.dxyErr
-                    df['mu2_dxy_sig'] = tab.mu2.dxyErr
                 
-                    df['mu1_dz'] = tab.mu1.dz
-                    df['mu2_dz'] = tab.mu2.dz
-                    df['mu1_dz_sig'] = tab.mu1.dzErr
-                    df['mu2_dz_sig'] = tab.mu2.dzErr             
-                    '''
+                    df['mu1_dxy'] = tab.mu1_dxy
+                    df['mu2_dxy'] = tab.mu2_dxy
+                    df['mu1_dxyErr'] = tab.mu1_dxyErr
+                    df['mu2_dxyErr'] = tab.mu2_dxyErr
+                
+                    df['mu1_dz'] = tab.mu1_dz
+                    df['mu2_dz'] = tab.mu2_dz
+                    df['mu1_dzErr'] = tab.mu1_dzErr
+                    df['mu2_dzErr'] = tab.mu2_dzErr             
+                    bcands['nPV'] = tab.nPrimaryVertices
+                
                     #not very useful, now we have jpsi vertex coordinates
                     '''
                     df['mu1_vx'] = tab.mu1.vx
@@ -609,21 +582,18 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['bvtx_fit_k_phi'] = tab.bodies3_fit_k_phi
                         df['bvtx_fit_k_eta'] = tab.bodies3_fit_k_eta
                         
-                        '''
-                        if(chan == 'BTo3Mu'):
-                            df['k_dxy_sig'] = tab.k.dxyErr
-                            df['k_dz_sig'] = tab.k.dzErr
-                        else:
-                            df['k_dxy_sig'] = tab.k.dxyS
-                            df['k_dz_sig'] = tab.k.dzS
-                        '''
+
+                        df['k_dxyErr'] = tab.k_dxyErr
+                        df['k_dzErr'] = tab.k_dzErr
+                        
                         df['kpt'] = tab.k.p4.pt
                         df['kmass'] = tab.k.p4.mass
                         df['kphi'] = tab.k.p4.phi
                         df['keta'] = tab.k.p4.eta
-                        #df['k_dxy'] = tab.k.dxy
-                        #                        df['k_dz'] = tab.k.dz
-                        '''                        df['k_vy'] = tab.k_vy
+                        df['k_dxy'] = tab.k_dxy
+                        df['k_dz'] = tab.k_dz
+                
+                        '''
                         df['k_vx'] = tab.k_vx
                         df['k_vz'] = tab.k_vz
                         '''
@@ -645,19 +615,19 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                         df['bvtx_fit_pi3_phi'] = tab.bodies3_fit_pi3_phi
 
                         #impact parameter
-                        '''df['pi1_dxy_sig'] = tab.pi1.dxyS
-                        df['pi1_dz_sig'] = tab.pi1.dzS
-                        df['pi1_dxy'] = tab.pi1.dxy
-                        df['pi1_dz'] = tab.pi1.dz
-                        df['pi2_dxy_sig'] = tab.pi2.dxyS
-                        df['pi2_dz_sig'] = tab.pi2.dzS
-                        df['pi2_dxy'] = tab.pi2.dxy
-                        df['pi2_dz'] = tab.pi2.dz
-                        df['pi3_dxy_sig'] = tab.pi3.dxyS
-                        df['pi3_dz_sig'] = tab.pi3.dzS
-                        df['pi3_dxy'] = tab.pi3.dxy
-                        df['pi3_dz'] = tab.pi3.dz
-                        '''
+                        df['pi1_dxyErr'] = tab.pi1_dxyErr
+                        df['pi1_dzErr'] = tab.pi1_dzErr
+                        df['pi1_dxy'] = tab.pi1_dxy
+                        df['pi1_dz'] = tab.pi1_dz
+                        df['pi2_dxyErr'] = tab.pi2_dxyErr
+                        df['pi2_dzErr'] = tab.pi2_dzErr
+                        df['pi2_dxy'] = tab.pi2_dxy
+                        df['pi2_dz'] = tab.pi2_dz
+                        df['pi3_dxyErr'] = tab.pi3_dxyErr
+                        df['pi3_dzErr'] = tab.pi3_dzErr
+                        df['pi3_dxy'] = tab.pi3_dxy
+                        df['pi3_dz'] = tab.pi3_dz
+                        
                         df['pi1pt'] = tab.pi1.p4.pt
                         df['pi1mass'] = tab.pi1.p4.mass
                         df['pi1phi'] = tab.pi1.p4.phi
@@ -685,8 +655,8 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     if(dataset!=args.data):
                         
                         #PU weight
-                        
-                        '''df['puWeight'] = tab.puWeight
+                        '''
+                        df['puWeight'] = tab.puWeight
                         df['puWeightUp'] = tab.puWeightUp
                         df['puWeightDown'] = tab.puWeightDown
                         '''
@@ -920,6 +890,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df = jpsi_branches(df)
                     if channel != 'BTo2Mu3P':
                         df = DR_jpsimu(df)
+                        df = mcor(df)
                     df = decaytime(df)
                         
                     #print("Finito di processare la flag ",name, " la concateno a quella totale.")
