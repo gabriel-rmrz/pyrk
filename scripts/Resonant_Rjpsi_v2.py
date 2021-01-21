@@ -527,7 +527,7 @@ for dataset in [args.data,args.mc_mu,args.mc_tau,args.mc_x,args.mc_onia,args.mc_
                     df['mu2_dz'] = tab.mu2_dz
                     df['mu1_dzErr'] = tab.mu1_dzErr
                     df['mu2_dzErr'] = tab.mu2_dzErr             
-                    bcands['nPV'] = tab.nPrimaryVertices
+                    #G: bcands['nPV'] = tab.nPrimaryVertices
                 
                     #not very useful, now we have jpsi vertex coordinates
                     '''
