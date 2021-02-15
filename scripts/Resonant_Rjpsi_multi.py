@@ -1,0 +1,974 @@
+#from nanoAOD root files, to 1D hd5 files
+
+from mybatch import *
+from coffea.analysis_objects import JaggedCandidateArray
+import awkward as awk
+import numpy as np
+import uproot
+from nanoframe import NanoFrame
+import os
+import particle
+import pandas as pd
+import uproot_methods
+import ROOT
+from pdb import set_trace
+from root_pandas import to_root
+from uproot_methods import TLorentzVectorArray
+from uproot_methods import TVector3Array
+from uproot_methods import TLorentzVector
+from uproot_methods import TVector3
+from scipy.constants import c as speed_of_light
+from multiprocessing import Process
+from multiprocessing import Pool
+
+
+## lifetime weights ##
+def weight_to_new_ctau(old_ctau, new_ctau, ct):
+    '''
+    Returns an event weight based on the ratio of the normalised lifetime distributions.
+    old_ctau: ctau used for the sample production
+    new_ctau: target ctau
+    ct      : per-event lifetime
+    '''
+    weight = old_ctau/new_ctau * np.exp( (1./old_ctau - 1./new_ctau) * ct )
+    return weight
+    
+def lifetime_weight(pf, fake = True):
+    #G: print("Adding lifetime weight branch...")
+    if fake:
+        ctau_weight_central = np.ones(len(pf))
+        ctau_weight_up = np.ones(len(pf))
+        ctau_weight_down = np.ones(len(pf))
+        pf['ctau_weight_central'] = ctau_weight_central
+        pf['ctau_weight_up'] = ctau_weight_up
+        pf['ctau_weight_down'] = ctau_weight_down
+        return pf
+    else:
+        Bc_mass = 6.274
+        ctau_pdg    = 0.510e-12 * speed_of_light * 1000. # in mm
+        ctau_actual = 0.1358
+        ctau_up     = (0.510+0.009)*1e-12 * speed_of_light * 1000. # in mm
+        ctau_down   = (0.510-0.009)*1e-12 * speed_of_light * 1000. # in mm
+        
+        ctau_weight_central = []
+        ctau_weight_up = []
+        ctau_weight_down = []
+
+        for i in range(len(pf)):
+            flag = 0
+            #jpsi vertex
+            if( abs(pf.mu1_mother_pdgId[i]) == 443 ):
+                jpsi_vertex = TVector3(pf.mu1_mother_vx[i],pf.mu1_mother_vy[i],pf.mu1_mother_vz[i])
+            elif( abs(pf.mu2_mother_pdgId[i]) == 443 ):
+                jpsi_vertex = TVector3(pf.mu2_mother_vx[i],pf.mu2_mother_vy[i],pf.mu2_mother_vz[i])
+             
+            else: 
+                flag = 1
+        
+            #Bc vertex
+            if(abs(pf.mu1_grandmother_pdgId[i]) == 541):
+                Bc_vertex = TVector3(pf.mu1_grandmother_vx[i],pf.mu1_grandmother_vy[i],pf.mu1_grandmother_vz[i])
+                Bc_p4 = TLorentzVector.from_ptetaphim(pf.mu1_grandmother_pt[i],pf.mu1_grandmother_eta[i],pf.mu1_grandmother_phi[i],Bc_mass)
+            elif(abs(pf.mu2_grandmother_pdgId[i]) == 541):
+                Bc_vertex = TVector3(pf.mu2_grandmother_vx[i],pf.mu2_grandmother_vy[i],pf.mu2_grandmother_vz[i])
+                Bc_p4 = TLorentzVector.from_ptetaphim(pf.mu2_grandmother_pt[i],pf.mu2_grandmother_eta[i],pf.mu2_grandmother_phi[i],Bc_mass)
+
+            else:
+                flag = 1
+        
+            if(flag == 1):
+                ctau_weight_central.append(1)
+                ctau_weight_up.append (1)
+                ctau_weight_down.append(1)
+       
+            else:
+                # distance
+                lxyz = (jpsi_vertex - Bc_vertex).mag
+                beta = Bc_p4.beta
+                gamma = Bc_p4.gamma
+                ct = lxyz/(beta * gamma)
+                #print(lxyz,beta,gamma,ct)
+                ctau_weight_central.append( weight_to_new_ctau(ctau_actual, ctau_pdg , ct*10.))
+                ctau_weight_up.append (weight_to_new_ctau(ctau_actual, ctau_up  , ct*10.))
+                ctau_weight_down.append(weight_to_new_ctau(ctau_actual, ctau_down, ct*10.))
+
+        pf['ctau_weight_central'] = ctau_weight_central
+        pf['ctau_weight_up'] = ctau_weight_up
+        pf['ctau_weight_down'] = ctau_weight_down
+        return pf
+## end lifetime weights ##
+
+def mcor(pf):
+    #https://cds.cern.ch/record/2697350/files/1910.13404.pdf
+    #only for bto3mu and bto2mutrk 
+    #G: print("Adding mcor variable...")
+    b_dir_vec = TVector3Array(pf.jpsivtx_vtx_x - pf.pv_x,pf.jpsivtx_vtx_y - pf.pv_y,pf.jpsivtx_vtx_z - pf.pv_z )
+    b_dir = b_dir_vec/np.sqrt(b_dir_vec.mag2)
+    jpsimu_p4 = TLorentzVectorArray.from_ptetaphim(pf.Bpt,pf.Beta,pf.Bphi,pf.Bmass)
+    jpsimu_p3 = jpsimu_p4.p3
+    p_parallel = jpsimu_p3.dot(b_dir) 
+    p_perp = np.sqrt(jpsimu_p3.mag2 - p_parallel * p_parallel)
+    mcor = np.sqrt(pf.Bmass * pf.Bmass + p_perp* p_perp) + p_perp
+    pf['mcor'] = mcor
+    return pf
+
+def DR_jpsimu(pf):
+    #G: print("Adding DR between jpsi and mu branch...")
+    mu1_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu1pt,pf.mu1eta,pf.mu1phi,pf.mu1mass)
+    mu2_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu2pt,pf.mu2eta,pf.mu2phi,pf.mu2mass)
+
+    jpsi_p4= mu1_p4 + mu2_p4 
+    #    jpsi_p4 = TLorentzVectorArray.from_ptetaphim((pf.mu1pt+pf.mu2pt),(pf.mu1eta,+pf.mu2eta),(pf.mu1phi+pf.mu2phi),(pf.mu1mass+pf.mu2mass))
+    mu_p4 = TLorentzVectorArray.from_ptetaphim(pf.kpt,pf.keta,pf.kphi,pf.kmass)
+    #    print(jpsi_p4.delta_r(mu_p4))
+    #    pf.copy()
+    pf['DR_jpsimu'] = jpsi_p4.delta_r(mu_p4)
+    return pf
+
+def jpsi_branches(pf):
+    #G: print("Adding jpsi four momentum branches...")
+    mu1_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu1pt,pf.mu1eta,pf.mu1phi,pf.mu1mass)
+    mu2_p4 = TLorentzVectorArray.from_ptetaphim(pf.mu2pt,pf.mu2eta,pf.mu2phi,pf.mu2mass)
+    jpsi_p4= mu1_p4 + mu2_p4
+    
+    #pf = pf.copy()
+
+    pf['jpsi_pt'] = jpsi_p4.pt
+    pf['jpsi_eta'] = jpsi_p4.eta
+    pf['jpsi_phi'] = jpsi_p4.phi
+    pf['jpsi_mass'] = jpsi_p4.mass
+    return pf
+    
+# two decay time branches... which one to choose?
+def decaytime(pf):
+    #G: print("Adding decay time branch...")
+    PV_pos = TVector3Array(pf.pv_x,pf.pv_y,pf.pv_z)
+    jpsiVertex_pos = TVector3Array(pf.jpsivtx_vtx_x,pf.jpsivtx_vtx_y,pf.jpsivtx_vtx_z)
+    dist1 = (PV_pos - jpsiVertex_pos).mag
+    decay_time1 = dist1 * 6.276 / (pf.Bpt_reco * 2.998e+10)
+    #pf.copy()
+    pf['decay_time'] = decay_time1
+    return pf
+
+
+def processFile(data='', mc_mu='', mc_tau='', mc_x='', mc_onia='', mc_gen='', nFilesPerJob =1, fileSetsToSkip =0):
+  maxEvents = -1
+  index = fileSetsToSkip + 1
+  checkDoubles = True
+  
+  flag_names = ['ptmax']
+  print("Begining job")
+  nprocessedAll = 0
+  #loop on datasets
+  for dataset in [data,mc_mu,mc_tau,mc_x,mc_onia,mc_gen]: 
+      if(dataset==''):
+          continue
+      print(" ")
+      
+      #channels = ['BTo3Mu','BTo2MuP','BTo2MuK','BTo2Mu3P']
+      #channels = ['BTo3Mu','BTo2MuP','BTo2MuK']
+      channels = ['BTo3Mu']
+      #print("Opening file", dataset)
+      f=open(dataset,"r")
+      paths = f.readlines()
+  
+      #################################################################################
+      # MC BcToXToJpsi #
+      #################################################################################
+      if(dataset == mc_x):
+  
+          final_dfs_mmm = {
+              'is_jpsi_mu' : pd.DataFrame(),
+              'is_jpsi_tau' : pd.DataFrame(),
+              'is_jpsi_pi' : pd.DataFrame(),
+              'is_psi2s_mu' :pd.DataFrame(),
+              'is_chic0_mu' : pd.DataFrame(),
+              'is_chic1_mu' : pd.DataFrame(),
+              'is_chic2_mu' : pd.DataFrame(),
+              'is_hc_mu' : pd.DataFrame(),
+              'is_psi2s_tau' : pd.DataFrame(),
+              'is_jpsi_3pi' : pd.DataFrame(),
+              'is_jpsi_hc' : pd.DataFrame(),
+          }
+          
+          final_dfs_pmm = {
+              'is_jpsi_mu' : pd.DataFrame(),
+              'is_jpsi_tau' : pd.DataFrame(),
+              'is_jpsi_pi' : pd.DataFrame(),
+              'is_psi2s_mu' :pd.DataFrame(),
+              'is_chic0_mu' : pd.DataFrame(),
+              'is_chic1_mu' : pd.DataFrame(),
+              'is_chic2_mu' : pd.DataFrame(),
+              'is_hc_mu' : pd.DataFrame(),
+              'is_psi2s_tau' : pd.DataFrame(),
+              'is_jpsi_3pi' : pd.DataFrame(),
+              'is_jpsi_hc' : pd.DataFrame(),
+          }
+          
+          final_dfs_kmm = {
+              'is_jpsi_mu' : pd.DataFrame(),
+              'is_jpsi_tau' : pd.DataFrame(),
+              'is_jpsi_pi' : pd.DataFrame(),
+              'is_psi2s_mu' :pd.DataFrame(),
+              'is_chic0_mu' : pd.DataFrame(),
+              'is_chic1_mu' : pd.DataFrame(),
+              'is_chic2_mu' : pd.DataFrame(),
+              'is_hc_mu' : pd.DataFrame(),
+              'is_psi2s_tau' : pd.DataFrame(),
+              'is_jpsi_3pi' : pd.DataFrame(),
+              'is_jpsi_hc' : pd.DataFrame(),
+          }
+  
+          final_dfs_2m3p = {
+              'is_jpsi_mu' : pd.DataFrame(),
+              'is_jpsi_tau' : pd.DataFrame(),
+              'is_jpsi_pi' : pd.DataFrame(),
+              'is_psi2s_mu' :pd.DataFrame(),
+              'is_chic0_mu' : pd.DataFrame(),
+              'is_chic1_mu' : pd.DataFrame(),
+              'is_chic2_mu' : pd.DataFrame(),
+              'is_hc_mu' : pd.DataFrame(),
+              'is_psi2s_tau' : pd.DataFrame(),
+              'is_jpsi_3pi' : pd.DataFrame(),
+              'is_jpsi_hc' : pd.DataFrame(),
+          }
+          
+      else:
+          final_dfs_mmm = {
+              'ptmax' : pd.DataFrame(),
+          }
+  
+          final_dfs_pmm = {
+              'ptmax' : pd.DataFrame(),
+          }
+  
+          final_dfs_kmm = {
+              'ptmax' : pd.DataFrame(),
+          }
+  
+          final_dfs_2m3p = {
+              'ptmax' : pd.DataFrame(),
+          }
+  
+      
+      nprocessedDataset = 0
+      nFiles = 0
+      for i,fname in enumerate(paths):
+          fname= fname.strip('\n')
+          #if(i%1==0):
+              #print("Processing file ", fname)
+          if(i < fileSetsToSkip * nFilesPerJob): # if I want to skip 1 file, I want to skip i=0 -> i+1
+              #print("Skipping the file...")
+              continue
+             
+          if(nFiles >= nFilesPerJob and nFilesPerJob != -1):
+              print("Job finished")
+              break
+          nFiles +=1
+         
+  
+          for channel in channels:
+              #print("In channel "+channel)
+              # Load the needed collections, NanoFrame is just an empty shell until we call the collections
+              nf = NanoFrame(fname, )#branches = branches)
+              evt = nf['event']
+              muons = nf['Muon']
+              bcands = nf[channel]
+              hlt = nf['HLT']
+              gen= nf['GenPart']
+              bcands['event'] = nf['event']
+              bcands['run'] = nf['run']
+              bcands['luminosityBlock'] = nf['luminosityBlock']    
+              if(len(nf[channel]) == 0):
+                  print("Empty channel!")
+                  continue
+              bcands['l_xy_sig'] = bcands.bodies3_l_xy / np.sqrt(bcands.bodies3_l_xy_unc)
+              #bcands['pv'] = nf['PV']
+              # NEED to ADD THIS
+              if(dataset == mc_x):
+                  bcands['is_jpsi_tau'] = nf['DecayFlag_is_jpsi_tau']
+                  bcands['is_jpsi_mu'] = nf['DecayFlag_is_jpsi_mu']
+                  bcands['is_jpsi_pi'] = nf['DecayFlag_is_jpsi_pi']
+                  bcands['is_psi2s_mu'] = nf['DecayFlag_is_psi2s_mu']
+                  bcands['is_psi2s_tau'] = nf['DecayFlag_is_psi2s_tau']
+                  bcands['is_chic0_mu'] = nf['DecayFlag_is_chic0_mu']
+                  bcands['is_chic1_mu'] = nf['DecayFlag_is_chic1_mu']
+                  bcands['is_chic2_mu'] = nf['DecayFlag_is_chic2_mu']
+                  bcands['is_hc_mu'] = nf['DecayFlag_is_hc_mu']
+                  bcands['is_jpsi_3pi'] = nf['DecayFlag_is_jpsi_3pi']
+                  bcands['is_jpsi_hc'] = nf['DecayFlag_is_jpsi_hc']
+  
+  
+              #number of events processed
+              nprocessedDataset += hlt.shape[0]
+              nprocessedAll+=hlt.shape[0]
+  
+              #add muon infos        
+              mu1 = JaggedCandidateArray.zip({n: muons[bcands['mu1Idx']][n] for n in muons[bcands['mu1Idx']].columns})
+              mu2 = JaggedCandidateArray.zip({n: muons[bcands['mu2Idx']][n] for n in muons[bcands['mu2Idx']].columns})
+              if channel == 'BTo3Mu':
+                  k = JaggedCandidateArray.zip({n: muons[bcands['kIdx']][n] for n in muons[bcands['kIdx']].columns})
+       
+              else:
+                  tracks = nf['ProbeTracks']
+                  if channel == 'BTo2Mu3P':
+                      pi1 = JaggedCandidateArray.zip({n: tracks[bcands['pi1Idx']][n] for n in tracks[bcands['pi1Idx']].columns})
+                      pi2 = JaggedCandidateArray.zip({n: tracks[bcands['pi2Idx']][n] for n in tracks[bcands['pi2Idx']].columns})
+                      pi3 = JaggedCandidateArray.zip({n: tracks[bcands['pi3Idx']][n] for n in tracks[bcands['pi3Idx']].columns})
+                  if channel == 'BTo2MuP' or channel == 'BTo2MuK':
+                      k = JaggedCandidateArray.zip({n: tracks[bcands['kIdx']][n] for n in tracks[bcands['kIdx']].columns})
+                  
+  
+              # the MC ONia needs a specific treatment for gen, because there are cases in which thegen collection is zero! And in these cases we can not directly add the gen branch to the muons branch. So, consdiering that to use the MC Onia we need an additional requirement: that the third muon iha pdgId==+-13, we can mask the events in which k.genPrtIdx==-1
+              if(dataset==mc_onia and channel!='BTo2Mu3P'):
+                  mask = (k.genPartIdx != -1)
+                  mu1_new = mu1[mask]
+                  mu2_new = mu2[mask]
+                  k_new = k[mask]
+                  mu1 = JaggedCandidateArray.zip({n: mu1_new[n] for n in mu1_new.columns})
+                  mu2 = JaggedCandidateArray.zip({n: mu2_new[n] for n in mu2_new.columns})
+                  k = JaggedCandidateArray.zip({n: k_new[n] for n in k_new.columns})
+                  bcands = JaggedCandidateArray.zip({n: bcands[mask][n] for n in bcands[mask].columns})
+  
+              
+              # add gen info as a column of the muon
+              if (dataset!=data):
+                  #pile up weights only for mc
+  
+                  bcands['puWeight'] = nf['puWeight']
+                  bcands['puWeightUp'] = nf['puWeightUp']
+                  bcands['puWeightDown'] = nf['puWeightDown']
+  
+                  mu1['gen'] = gen[mu1.genPartIdx]
+                  mu2['gen'] = gen[mu2.genPartIdx]
+                  
+                  mu1['mother'] = gen[gen[mu1.genPartIdx].genPartIdxMother]
+                  mu2['mother'] = gen[gen[mu2.genPartIdx].genPartIdxMother]
+                 
+                  mu1['grandmother'] = gen[gen[gen[mu1.genPartIdx].genPartIdxMother].genPartIdxMother]
+                  mu2['grandmother'] = gen[gen[gen[mu2.genPartIdx].genPartIdxMother].genPartIdxMother]
+                  if(channel == 'BTo2Mu3P'):
+                      pi1['gen'] = gen[pi1.genPartIdx]
+                      pi2['gen'] = gen[pi2.genPartIdx]
+                      pi3['gen'] = gen[pi3.genPartIdx]
+                      pi1['mother'] = gen[gen[pi1.genPartIdx].genPartIdxMother]
+                      pi2['mother'] = gen[gen[pi2.genPartIdx].genPartIdxMother]
+                      pi3['mother'] = gen[gen[pi3.genPartIdx].genPartIdxMother]
+                      pi1['grandmother'] = gen[gen[gen[pi1.genPartIdx].genPartIdxMother].genPartIdxMother]
+                      pi2['grandmother'] = gen[gen[gen[pi2.genPartIdx].genPartIdxMother].genPartIdxMother]
+                      pi3['grandmother'] = gen[gen[gen[pi3.genPartIdx].genPartIdxMother].genPartIdxMother]
+                  else:
+                      k['gen'] = gen[k.genPartIdx]
+                      k['mother'] = gen[gen[k.genPartIdx].genPartIdxMother]
+                      k['grandmother'] = gen[gen[gen[k.genPartIdx].genPartIdxMother].genPartIdxMother]
+                  
+                  if (dataset!=mc_mu):
+                      mu1['grandgrandmother'] =gen[gen[gen[gen[mu1.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]
+                      mu2['grandgrandmother'] =gen[gen[gen[gen[mu2.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]
+                      if(channel == 'BTo2Mu3P'):
+                          pi1['grandgrandmother'] =gen[gen[gen[gen[pi1.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
+                          pi2['grandgrandmother'] =gen[gen[gen[gen[pi2.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
+                          pi3['grandgrandmother'] =gen[gen[gen[gen[pi3.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
+                      else:
+                          k['grandgrandmother'] =gen[gen[gen[gen[k.genPartIdx].genPartIdxMother].genPartIdxMother].genPartIdxMother]                
+                          
+  
+              bcands['mu1']= mu1
+              bcands['mu2'] = mu2
+              if(channel == 'BTo2Mu3P'):
+                  bcands['pi1'] = pi1
+                  bcands['pi2'] = pi2
+                  bcands['pi3'] = pi3
+              else:
+                  bcands['k'] = k
+              
+              b_selection = ((bcands.p4.mass < 10 ) & (bcands.bodies3_svprob > 1e-7))
+              x_selection= (bcands.p4.pt > -99)
+          
+          
+              #Delete the signal from the JpsiX MC
+              if (dataset==mc_onia):
+                  if(channel == 'BTo2Mu3P'):
+                      x_selection= ~ ((bcands.pi1.genPartIdx>=0) & ( bcands.mu1.genPartIdx>=0) & (bcands.mu2.genPartIdx>=0) & (abs(bcands.mu1.mother.pdgId) == 443) & (abs(bcands.mu2.mother.pdgId) == 443) & (abs(bcands.pi1.grandmother.pdgId) == 541) & (abs(bcands.mu2.grandmother.pdgId) == 541) & ( (abs(bcands.pi1.mother.pdgId)==541) | ( (abs(bcands.pi1.mother.pdgId)==15) & (abs(bcands.pi1.grandmother.pdgId)== 541))))
+  
+                  else:
+                      x_selection= ~ ((bcands.k.genPartIdx>=0) & ( bcands.mu1.genPartIdx>=0) & (bcands.mu2.genPartIdx>=0) & (abs(bcands.mu1.mother.pdgId) == 443) & (abs(bcands.mu2.mother.pdgId) == 443) & (abs(bcands.mu1.grandmother.pdgId) == 541) & (abs(bcands.mu2.grandmother.pdgId) == 541) & ( (abs(bcands.k.mother.pdgId)==541) | ( (abs(bcands.k.mother.pdgId)==15) & (abs(bcands.k.grandmother.pdgId)== 541))))
+  
+              if(dataset == mc_x):
+              
+                  jpsi_tau_sel = (bcands.is_jpsi_tau == 1)
+                  jpsi_mu_sel = (bcands.is_jpsi_mu == 1)
+                  jpsi_pi_sel = (bcands.is_jpsi_pi == 1)
+                  psi2s_mu_sel = (bcands.is_psi2s_mu == 1)
+                  chic0_mu_sel = (bcands.is_chic0_mu == 1)
+                  chic1_mu_sel = (bcands.is_chic1_mu == 1)
+                  chic2_mu_sel = (bcands.is_chic2_mu == 1)
+                  hc_mu_sel = (bcands.is_hc_mu == 1)
+                  psi2s_tau_sel = (bcands.is_psi2s_tau == 1)
+                  jpsi_3pi_sel = (bcands.is_jpsi_3pi == 1)
+                  jpsi_hc_sel = (bcands.is_jpsi_hc == 1)
+  
+                  flag_selection= [jpsi_tau_sel,jpsi_mu_sel,jpsi_pi_sel,psi2s_mu_sel,chic0_mu_sel,chic1_mu_sel,chic2_mu_sel,hc_mu_sel,psi2s_tau_sel,jpsi_3pi_sel,jpsi_hc_sel]
+                  flag_names = ['is_jpsi_tau','is_jpsi_mu','is_jpsi_pi','is_psi2s_mu','is_chic0_mu','is_chic1_mu','is_chic2_mu','is_hc_mu','is_psi2s_tau','is_jpsi_3pi','is_jpsi_hc']
+              else:
+                  flag_selection = [(bcands.p4.pt>-99)]
+                  flag_names = ['ptmax']
+              for selection,name in zip(flag_selection, flag_names):
+                  best_pf_cand_pt = bcands[b_selection & x_selection & selection ].p4.pt.argmax() #B con pt massimo
+                  bcands_flag = (bcands[b_selection & x_selection & selection][best_pf_cand_pt]).flatten()
+                  dfs = {}
+              
+                  for chan, tab, sel in [
+                          (channel, bcands_flag, b_selection & x_selection & selection), 
+                  ]:
+                      dfs[name] = pd.DataFrame()
+                      df = dfs[name]
+                      df['event'] = tab['event']
+                      df['run'] = tab['run']
+                      df['luminosityBlock'] = tab['luminosityBlock']
+  
+                      #Bc Vertex properties
+                      df['bvtx_chi2'] = tab.bodies3_chi2
+                      df['bvtx_svprob'] = tab.bodies3_svprob
+                      df['bvtx_lxy_sig'] = (tab.bodies3_l_xy / tab.bodies3_l_xy_unc)
+                      df['bvtx_lxy'] = tab.bodies3_l_xy
+                      df['bvtx_lxy_unc'] = tab.bodies3_l_xy_unc
+                      df['bvtx_vtx_x'] = tab.bodies3_vtx_x
+                      df['bvtx_vtx_y'] = tab.bodies3_vtx_y
+                      df['bvtx_vtx_z'] = tab.bodies3_vtx_z
+                      df['bvtx_vtx_ex'] = tab.bodies3_vtx_ex
+                      df['bvtx_vtx_ey'] = tab.bodies3_vtx_ey
+                      df['bvtx_vtx_ez'] = tab.bodies3_vtx_ez
+                      df['bvtx_cos2D'] = tab.bodies3_cos2D
+  
+                      #jpsi vertex properties
+                      df['jpsivtx_chi2'] = tab.jpsivtx_chi2
+                      df['jpsivtx_svprob'] = tab.jpsivtx_svprob
+                      df['jpsivtx_lxy_sig'] = (tab.jpsivtx_l_xy / tab.jpsivtx_l_xy_unc)
+                      df['jpsivtx_lxy'] = tab.jpsivtx_l_xy
+                      df['jpsivtx_lxy_unc'] = tab.jpsivtx_l_xy_unc
+                      df['jpsivtx_vtx_x'] = tab.jpsivtx_vtx_x
+                      df['jpsivtx_vtx_y'] = tab.jpsivtx_vtx_y
+                      df['jpsivtx_vtx_z'] = tab.jpsivtx_vtx_z
+                      df['jpsivtx_vtx_ex'] = tab.jpsivtx_vtx_ex
+                      df['jpsivtx_vtx_ey'] = tab.jpsivtx_vtx_ey
+                      df['jpsivtx_vtx_ez'] = tab.jpsivtx_vtx_ez
+                      df['jpsivtx_cos2D'] = tab.jpsivtx_cos2D
+                      
+                      #postfit 3 partc vertex
+                      df['bvtx_fit_mass'] = tab.bodies3_fit_mass
+                      df['bvtx_fit_massErr'] = tab.bodies3_fit_massErr
+                      df['bvtx_fit_pt'] = tab.bodies3_fit_pt
+                      df['bvtx_fit_eta'] = tab.bodies3_fit_eta
+                      df['bvtx_fit_phi'] = tab.bodies3_fit_phi
+                      df['bvtx_fit_mu1_pt'] = tab.bodies3_fit_mu1_pt
+                      df['bvtx_fit_mu1_eta'] = tab.bodies3_fit_mu1_eta
+                      df['bvtx_fit_mu1_phi'] = tab.bodies3_fit_mu1_phi
+                      df['bvtx_fit_mu2_pt'] = tab.bodies3_fit_mu2_pt
+                      df['bvtx_fit_mu2_eta'] = tab.bodies3_fit_mu2_eta
+                      df['bvtx_fit_mu2_phi'] = tab.bodies3_fit_mu2_phi
+                      df['bvtx_fit_cos2D'] = tab.bodies3_fit_cos2D
+  
+                      #postfit 2 part vertex
+                      df['jpsivtx_fit_mass'] = tab.jpsivtx_fit_mass
+                      df['jpsivtx_fit_massErr'] = tab.jpsivtx_fit_massErr
+                      df['jpsivtx_fit_pt'] = tab.jpsivtx_fit_pt
+                      df['jpsivtx_fit_eta'] = tab.jpsivtx_fit_eta
+                      df['jpsivtx_fit_phi'] = tab.jpsivtx_fit_phi
+                      df['jpsivtx_fit_mu1_pt'] = tab.jpsivtx_fit_mu1_pt
+                      df['jpsivtx_fit_mu1_eta'] = tab.jpsivtx_fit_mu1_eta
+                      df['jpsivtx_fit_mu1_phi'] = tab.jpsivtx_fit_mu1_phi
+                      df['jpsivtx_fit_mu2_pt'] = tab.jpsivtx_fit_mu2_pt
+                      df['jpsivtx_fit_mu2_eta'] = tab.jpsivtx_fit_mu2_pt
+                      df['jpsivtx_fit_mu2_phi'] = tab.jpsivtx_fit_mu2_pt
+                      df['jpsivtx_fit_cos2D'] = tab.jpsivtx_fit_cos2D
+                  
+                      #iso
+                      df['b_iso03'] = tab.b_iso03
+                      df['b_iso04'] = tab.b_iso04
+                      df['mu1_iso03'] = tab.mu1_iso03
+                      df['mu1_iso04'] = tab.mu1_iso04
+                      df['mu2_iso03'] = tab.mu2_iso03
+                      df['mu2_iso04'] = tab.mu2_iso04
+                
+                      #beamspot
+                      df['beamspot_x'] = tab.beamspot_x
+                      df['beamspot_y'] = tab.beamspot_y
+                      df['beamspot_z'] = tab.beamspot_z
+  
+                      #our variables
+                      df['m_miss_sq'] = tab.m_miss_sq
+                      df['Q_sq']=tab.Q_sq
+                      df['pt_var']=tab.pt_var
+                      df['pt_miss_vec']=tab.pt_miss_vec
+                      df['pt_miss_scal'] = tab.pt_miss
+                      df['DR_mu1mu2']=tab.DR 
+                                          
+                      #Kinematic
+                      df['mu1pt'] = tab.mu1.p4.pt
+                      df['mu2pt'] = tab.mu2.p4.pt
+                      df['mu1mass'] = tab.mu1.p4.mass
+                      df['mu2mass'] = tab.mu2.p4.mass
+                      df['mu1phi'] = tab.mu1.p4.phi
+                      df['mu2phi'] = tab.mu2.p4.phi
+                      df['mu1eta'] = tab.mu1.p4.eta
+                      df['mu2eta'] = tab.mu2.p4.eta
+                      
+                      df['Bpt'] = tab.p4.pt
+                      df['Bmass'] = tab.p4.mass
+                      df['Beta'] = tab.p4.eta
+                      df['Bphi'] = tab.p4.phi
+                      df['Bpt_reco'] = (tab.p4.pt * 6.275 / tab.p4.mass)
+                      
+                      if(channel == 'BTo3Mu'):
+                        df['k_ip3D_wrtJpsi'] = tab.ip3D
+                        df['k_ip3D_e_wrtJpsi'] = tab.ip3D_e
+                  
+                      df['mu1_dxy'] = tab.mu1_dxy
+                      df['mu2_dxy'] = tab.mu2_dxy
+                      df['mu1_dxyErr'] = tab.mu1_dxyErr
+                      df['mu2_dxyErr'] = tab.mu2_dxyErr
+                  
+                      df['mu1_dz'] = tab.mu1_dz
+                      df['mu2_dz'] = tab.mu2_dz
+                      df['mu1_dzErr'] = tab.mu1_dzErr
+                      df['mu2_dzErr'] = tab.mu2_dzErr             
+                      #G: bcands['nPV'] = tab.nPrimaryVertices
+                  
+                      #not very useful, now we have jpsi vertex coordinates
+                      '''
+                      df['mu1_vx'] = tab.mu1.vx
+                      df['mu2_vx'] = tab.mu2.vx
+                                          
+                      df['mu1_vy'] = tab.mu1.vy
+                      df['mu2_vy'] = tab.mu2.vy
+  
+                      df['mu1_vz'] = tab.mu1.vz
+                      df['mu2_vz'] = tab.mu2.vz
+                      '''
+                      #PV position
+                      df['pv_x'] = tab.pv_x
+                      df['pv_y'] = tab.pv_y
+                      df['pv_z'] = tab.pv_z
+                      
+                      #df['npv_good'] = tab.PV_npvsGood
+                                          
+                      #IDs
+                      df['mu1_mediumID']= tab.mu1.mediumId
+                      df['mu2_mediumID']= tab.mu2.mediumId
+                      df['mu1_tightID']= tab.mu1.tightId
+                      df['mu2_tightID']= tab.mu2.tightId
+                      df['mu1_softID']= tab.mu1.softId
+                      df['mu2_softID']= tab.mu2.softId
+
+                      df['mu1_isDimuon0Trg'] = tab.mu1.isDimuon0Trg
+                      df['mu2_isDimuon0Trg'] = tab.mu2.isDimuon0Trg
+                
+                      df['mu1_isJpsiTrkTrg'] = tab.mu1.isJpsiTrkTrg
+                      df['mu2_isJpsiTrkTrg'] = tab.mu2.isJpsiTrkTrg
+                
+                      df['mu1_isJpsiTrk_PsiPrimeTrg'] = tab.mu1.isJpsiTrk_PsiPrimeTrg
+                      df['mu2_isJpsiTrk_PsiPrimeTrg'] = tab.mu2.isJpsiTrk_PsiPrimeTrg
+                                  
+                      df['mu1_isJpsiTrk_NonResonantTrg'] = tab.mu1.isJpsiTrk_NonResonantTrg
+                      df['mu2_isJpsiTrk_NonResonantTrg'] = tab.mu2.isJpsiTrk_NonResonantTrg
+
+                      if(chan == 'BTo3Mu'):
+                          df['k_tightID']= tab.k.tightId
+                          df['k_mediumID']=tab.k.mediumId
+                          df['k_softID']=tab.k.softId
+                      
+                      #is PF ?
+                      df['mu1_isPF'] = tab.mu1.isPFcand
+                      df['mu2_isPF'] = tab.mu2.isPFcand
+                      if(chan == 'BTo3Mu'):
+                          df['k_isPF'] = tab.k.isPFcand
+                          
+                      #others
+                      df['Bcharge'] = tab.charge
+                      #df['mll_raw'] = tab.m_jpsi
+                      
+                      
+                      df['nB'] = sel.sum()[sel.sum() != 0]
+  
+                      if(channel != 'BTo2Mu3P'):
+                          df['E_mu_star']=tab.E_mu_star
+                          df['E_mu_canc']=tab.E_mu_canc
+                          df['k_iso03'] = tab.k_iso03
+                          df['k_iso04'] = tab.k_iso04
+                          df['bvtx_fit_k_pt'] = tab.bodies3_fit_k_pt
+                          df['bvtx_fit_k_phi'] = tab.bodies3_fit_k_phi
+                          df['bvtx_fit_k_eta'] = tab.bodies3_fit_k_eta
+                          
+                          df['k_dxyErr'] = tab.k_dxyErr
+                          df['k_dzErr'] = tab.k_dzErr
+                          
+                          df['kpt'] = tab.k.p4.pt
+                          df['kmass'] = tab.k.p4.mass
+                          df['kphi'] = tab.k.p4.phi
+                          df['keta'] = tab.k.p4.eta
+                          df['k_dxy'] = tab.k_dxy
+                          df['k_dz'] = tab.k_dz
+                          if(channel == 'BTo3Mu'):
+                            df['k_isDimuon0Trg'] = tab.k.isDimuon0Trg
+                            df['k_isJpsiTrkTrg'] = tab.k.isJpsiTrkTrg
+                            df['k_isJpsiTrk_PsiPrimeTrg'] = tab.k.isJpsiTrk_PsiPrimeTrg
+                            df['k_isJpsiTrk_NonResonantTrg'] = tab.k.isJpsiTrk_NonResonantTrg
+                  
+                          '''
+                          df['k_vx'] = tab.k_vx
+                          df['k_vz'] = tab.k_vz
+                          '''
+                      else:
+                          df['pi1_iso03'] = tab.pi1_iso03
+                          df['pi2_iso03'] = tab.pi2_iso03
+                          df['pi3_iso03'] = tab.pi3_iso03
+                          df['pi1_iso04'] = tab.pi1_iso04
+                          df['pi2_iso04'] = tab.pi2_iso04
+                          df['pi3_iso04'] = tab.pi3_iso04
+                          df['bvtx_fit_pi1_pt'] = tab.bodies3_fit_pi1_pt
+                          df['bvtx_fit_pi1_eta'] = tab.bodies3_fit_pi1_eta
+                          df['bvtx_fit_pi1_phi'] = tab.bodies3_fit_pi1_phi
+                          df['bvtx_fit_pi2_pt'] = tab.bodies3_fit_pi2_pt
+                          df['bvtx_fit_pi2_eta'] = tab.bodies3_fit_pi2_eta
+                          df['bvtx_fit_pi2_phi'] = tab.bodies3_fit_pi2_phi
+                          df['bvtx_fit_pi3_pt'] = tab.bodies3_fit_pi3_pt
+                          df['bvtx_fit_pi3_eta'] = tab.bodies3_fit_pi3_eta
+                          df['bvtx_fit_pi3_phi'] = tab.bodies3_fit_pi3_phi
+  
+                          #impact parameter
+                          df['pi1_dxyErr'] = tab.pi1_dxyErr
+                          df['pi1_dzErr'] = tab.pi1_dzErr
+                          df['pi1_dxy'] = tab.pi1_dxy
+                          df['pi1_dz'] = tab.pi1_dz
+                          df['pi2_dxyErr'] = tab.pi2_dxyErr
+                          df['pi2_dzErr'] = tab.pi2_dzErr
+                          df['pi2_dxy'] = tab.pi2_dxy
+                          df['pi2_dz'] = tab.pi2_dz
+                          df['pi3_dxyErr'] = tab.pi3_dxyErr
+                          df['pi3_dzErr'] = tab.pi3_dzErr
+                          df['pi3_dxy'] = tab.pi3_dxy
+                          df['pi3_dz'] = tab.pi3_dz
+                          
+                          df['pi1pt'] = tab.pi1.p4.pt
+                          df['pi1mass'] = tab.pi1.p4.mass
+                          df['pi1phi'] = tab.pi1.p4.phi
+                          df['pi1eta'] = tab.pi1.p4.eta
+                          df['pi2pt'] = tab.pi2.p4.pt
+                          df['pi2mass'] = tab.pi2.p4.mass
+                          df['pi2phi'] = tab.pi2.p4.phi
+                          df['pi2eta'] = tab.pi2.p4.eta
+                          df['pi3pt'] = tab.pi3.p4.pt
+                          df['pi3mass'] = tab.pi3.p4.mass
+                          df['pi3phi'] = tab.pi3.p4.phi
+                          df['pi3eta'] = tab.pi3.p4.eta
+  
+                          df['pi1_vy'] = tab.pi1.vy
+                          df['pi1_vx'] = tab.pi1.vx
+                          df['pi1_vz'] = tab.pi1.vz
+                          df['pi2_vy'] = tab.pi2.vy
+                          df['pi2_vx'] = tab.pi2.vx
+                          df['pi2_vz'] = tab.pi2.vz
+                          df['pi3_vy'] = tab.pi3.vy
+                          df['pi3_vx'] = tab.pi3.vx
+                          df['pi3_vz'] = tab.pi3.vz
+  
+                      #Gen variables
+                      if(dataset!=data):
+                          
+                          #PU weight
+  
+                          df['puWeight'] = tab.puWeight
+                          df['puWeightUp'] = tab.puWeightUp
+                          df['puWeightDown'] = tab.puWeightDown
+  
+                          #gen Part Flavour e gen Part Idx  -> if I need to access the gen info, this values tell me is it is a valid info or not
+                          df['mu1_genPartFlav'] = tab.mu1.genPartFlav
+                          df['mu2_genPartFlav'] = tab.mu2.genPartFlav
+                                            
+                          df['mu1_genPartIdx'] = tab.mu1.genPartIdx
+                          df['mu2_genPartIdx'] = tab.mu2.genPartIdx
+
+                          df['mu1_gen_pt'] = tab.mu1.p4.pt
+                          df['mu2_gen_pt'] = tab.mu2.p4.pt
+                          
+                          df['mu1_gen_eta'] = tab.mu1.p4.eta
+                          df['mu2_gen_eta'] = tab.mu2.p4.eta
+                          
+                          df['mu1_gen_phi'] = tab.mu1.p4.phi
+                          df['mu2_gen_phi'] = tab.mu2.p4.phi
+
+        
+                          #lifetime (gen info)
+                          df['mu1_gen_vx'] = tab.mu1.gen.vx
+                          df['mu2_gen_vx'] = tab.mu2.gen.vx
+                          
+                          df['mu1_gen_vy'] = tab.mu1.gen.vy
+                          df['mu2_gen_vy'] = tab.mu2.gen.vy
+                      
+                          df['mu1_gen_vz'] = tab.mu1.gen.vz
+                          df['mu2_gen_vz'] = tab.mu2.gen.vz
+                          
+                          #pdgId
+                          df['mu1_pdgId'] = tab.mu1.pdgId
+                          df['mu2_pdgId'] = tab.mu2.pdgId
+                          
+                          df['mu1_genpdgId'] = tab.mu1.gen.pdgId
+                          df['mu2_genpdgId'] = tab.mu2.gen.pdgId
+                          
+                          #mother info
+                          df['mu1_mother_pdgId'] = tab.mu1.mother.pdgId
+                          df['mu2_mother_pdgId'] = tab.mu2.mother.pdgId
+                          
+                          df['mu1_mother_pt'] = tab.mu1.mother.p4.pt
+                          df['mu2_mother_pt'] = tab.mu2.mother.p4.pt
+                          
+                          df['mu1_mother_eta'] = tab.mu1.mother.p4.eta
+                          df['mu2_mother_eta'] = tab.mu2.mother.p4.eta
+                          
+                          df['mu1_mother_phi'] = tab.mu1.mother.p4.phi
+                          df['mu2_mother_phi'] = tab.mu2.mother.p4.phi
+                          
+                          df['mu1_mother_vx'] = tab.mu1.mother.vx
+                          df['mu2_mother_vx'] = tab.mu2.mother.vx
+  
+                          df['mu1_mother_vy'] = tab.mu1.mother.vy
+                          df['mu2_mother_vy'] = tab.mu2.mother.vy
+                          df['mu1_mother_vz'] = tab.mu1.mother.vz
+                          df['mu2_mother_vz'] = tab.mu2.mother.vz
+  
+                          #grandmother info
+                          df['mu1_grandmother_pdgId'] = tab.mu1.grandmother.pdgId
+                          df['mu2_grandmother_pdgId'] = tab.mu2.grandmother.pdgId
+                          
+                          df['mu1_grandmother_pt'] = tab.mu1.grandmother.p4.pt
+                          df['mu2_grandmother_pt'] = tab.mu2.grandmother.p4.pt
+  
+                          
+                          df['mu1_grandmother_eta'] = tab.mu1.grandmother.p4.eta
+                          df['mu2_grandmother_eta'] = tab.mu2.grandmother.p4.eta
+                          
+                          df['mu1_grandmother_phi'] = tab.mu1.grandmother.p4.phi
+                          df['mu2_grandmother_phi'] = tab.mu2.grandmother.p4.phi
+  
+                          
+                          df['mu1_grandmother_vx'] = tab.mu1.grandmother.vx
+                          df['mu2_grandmother_vx'] = tab.mu2.grandmother.vx
+                          df['mu1_grandmother_vy'] = tab.mu1.grandmother.vy
+                          df['mu2_grandmother_vy'] = tab.mu2.grandmother.vy
+  
+                          df['mu1_grandmother_vz'] = tab.mu1.grandmother.vz
+                          df['mu2_grandmother_vz'] = tab.mu2.grandmother.vz
+  
+  
+                          if(channel != 'BTo2Mu3P'):
+                              df['k_genpdgId'] = tab.k.gen.pdgId
+                              df['k_pdgId'] = tab.k.pdgId
+                              df['k_gen_vz'] = tab.k.gen.vz
+                              df['k_genPartIdx'] = tab.k.genPartIdx
+                              df['k_genPartFlav'] = tab.k.genPartFlav
+                              df['k_gen_vx'] = tab.k.gen.vx
+                              df['k_gen_vy'] = tab.k.gen.vy
+                              df['k_mother_pdgId'] = tab.k.mother.pdgId
+                              df['k_mother_pt'] = tab.k.mother.p4.pt
+                              df['k_mother_eta'] = tab.k.mother.p4.eta
+                              df['k_mother_phi'] = tab.k.mother.p4.phi
+                              df['k_mother_vx'] = tab.k.mother.vx
+                              df['k_mother_vy'] = tab.k.mother.vy
+                              df['k_mother_vz'] = tab.k.mother.vz
+                              
+                              df['k_grandmother_pdgId'] = tab.k.grandmother.pdgId
+                              df['k_grandmother_pt'] = tab.k.grandmother.p4.pt
+                              df['k_grandmother_eta'] = tab.k.grandmother.p4.eta
+                              df['k_grandmother_phi'] = tab.k.grandmother.p4.phi                        
+                              df['k_grandmother_vx'] = tab.k.grandmother.vx
+                              df['k_grandmother_vy'] = tab.k.grandmother.vy
+                              df['k_grandmother_vz'] = tab.k.grandmother.vz
+  
+                          else:
+                              df['pi1_genpdgId'] = tab.pi1.gen.pdgId
+                              df['pi1_pdgId'] = tab.pi1.pdgId
+                              df['pi1_gen_vz'] = tab.pi1.gen.vz
+                              df['pi1_genPartIdx'] = tab.pi1.genPartIdx
+                              df['pi1_genPartFlav'] = tab.pi1.genPartFlav
+                              df['pi1_gen_vx'] = tab.pi1.gen.vx
+                              df['pi1_gen_vy'] = tab.pi1.gen.vy
+                              df['pi1_mother_pdgId'] = tab.pi1.mother.pdgId
+                              df['pi1_mother_pt'] = tab.pi1.mother.p4.pt
+                              df['pi1_mother_eta'] = tab.pi1.mother.p4.eta
+                              df['pi1_mother_phi'] = tab.pi1.mother.p4.phi
+                              df['pi1_mother_vx'] = tab.pi1.mother.vx
+                              df['pi1_mother_vy'] = tab.pi1.mother.vy
+                              df['pi1_mother_vz'] = tab.pi1.mother.vz
+                              
+                              df['pi1_grandmother_pdgId'] = tab.pi1.grandmother.pdgId
+                              df['pi1_grandmother_pt'] = tab.pi1.grandmother.p4.pt
+                              df['pi1_grandmother_eta'] = tab.pi1.grandmother.p4.eta
+                              df['pi1_grandmother_phi'] = tab.pi1.grandmother.p4.phi                        
+                              df['pi1_grandmother_vx'] = tab.pi1.grandmother.vx
+                              df['pi1_grandmother_vy'] = tab.pi1.grandmother.vy
+                              df['pi1_grandmother_vz'] = tab.pi1.grandmother.vz
+  
+                              df['pi2_genpdgId'] = tab.pi2.gen.pdgId
+                              df['pi2_pdgId'] = tab.pi2.pdgId
+                              df['pi2_gen_vz'] = tab.pi2.gen.vz
+                              df['pi2_genPartIdx'] = tab.pi2.genPartIdx
+                              df['pi2_genPartFlav'] = tab.pi2.genPartFlav
+                              df['pi2_gen_vx'] = tab.pi2.gen.vx
+                              df['pi2_gen_vy'] = tab.pi2.gen.vy
+                              df['pi2_mother_pdgId'] = tab.pi2.mother.pdgId
+                              df['pi2_mother_pt'] = tab.pi2.mother.p4.pt
+                              df['pi2_mother_eta'] = tab.pi2.mother.p4.eta
+                              df['pi2_mother_phi'] = tab.pi2.mother.p4.phi
+                              df['pi2_mother_vx'] = tab.pi2.mother.vx
+                              df['pi2_mother_vy'] = tab.pi2.mother.vy
+                              df['pi2_mother_vz'] = tab.pi2.mother.vz
+                              
+                              df['pi2_grandmother_pdgId'] = tab.pi2.grandmother.pdgId
+                              df['pi2_grandmother_pt'] = tab.pi2.grandmother.p4.pt
+                              df['pi2_grandmother_eta'] = tab.pi2.grandmother.p4.eta
+                              df['pi2_grandmother_phi'] = tab.pi2.grandmother.p4.phi                        
+                              df['pi2_grandmother_vx'] = tab.pi2.grandmother.vx
+                              df['pi2_grandmother_vy'] = tab.pi2.grandmother.vy
+                              df['pi2_grandmother_vz'] = tab.pi2.grandmother.vz
+  
+                              df['pi3_genpdgId'] = tab.pi3.gen.pdgId
+                              df['pi3_pdgId'] = tab.pi3.pdgId
+                              df['pi3_gen_vz'] = tab.pi3.gen.vz
+                              df['pi3_genPartIdx'] = tab.pi3.genPartIdx
+                              df['pi3_genPartFlav'] = tab.pi3.genPartFlav
+                              df['pi3_gen_vx'] = tab.pi3.gen.vx
+                              df['pi3_gen_vy'] = tab.pi3.gen.vy
+                              df['pi3_mother_pdgId'] = tab.pi3.mother.pdgId
+                              df['pi3_mother_pt'] = tab.pi3.mother.p4.pt
+                              df['pi3_mother_eta'] = tab.pi3.mother.p4.eta
+                              df['pi3_mother_phi'] = tab.pi3.mother.p4.phi
+                              df['pi3_mother_vx'] = tab.pi3.mother.vx
+                              df['pi3_mother_vy'] = tab.pi3.mother.vy
+                              df['pi3_mother_vz'] = tab.pi3.mother.vz
+                              
+                              df['pi3_grandmother_pdgId'] = tab.pi3.grandmother.pdgId
+                              df['pi3_grandmother_pt'] = tab.pi3.grandmother.p4.pt
+                              df['pi3_grandmother_eta'] = tab.pi3.grandmother.p4.eta
+                              df['pi3_grandmother_phi'] = tab.pi3.grandmother.p4.phi                        
+                              df['pi3_grandmother_vx'] = tab.pi3.grandmother.vx
+                              df['pi3_grandmother_vy'] = tab.pi3.grandmother.vy
+                              df['pi3_grandmother_vz'] = tab.pi3.grandmother.vz
+  
+                          
+                          if (dataset!=mc_mu):
+                              #grand grand mother info
+                              df['mu1_grandgrandmother_pdgId'] = tab.mu1.grandgrandmother.pdgId
+                              df['mu2_grandgrandmother_pdgId'] = tab.mu2.grandgrandmother.pdgId
+                              
+                              df['mu1_grandgrandmother_pt'] = tab.mu1.grandgrandmother.p4.pt
+                              df['mu2_grandgrandmother_pt'] = tab.mu2.grandgrandmother.p4.pt
+                              
+                              df['mu1_grandgrandmother_eta'] = tab.mu1.grandgrandmother.p4.eta
+                              df['mu2_grandgrandmother_eta'] = tab.mu2.grandgrandmother.p4.eta
+  
+                              
+                              df['mu1_grandgrandmother_phi'] = tab.mu1.grandgrandmother.p4.phi
+                              df['mu2_grandgrandmother_phi'] = tab.mu2.grandgrandmother.p4.phi
+  
+                              
+                              df['mu1_grandgrandmother_vx'] = tab.mu1.grandgrandmother.vx
+                              df['mu2_grandgrandmother_vx'] = tab.mu2.grandgrandmother.vx
+  
+                              df['mu1_grandgrandmother_vy'] = tab.mu1.grandgrandmother.vy
+                              df['mu2_grandgrandmother_vy'] = tab.mu2.grandgrandmother.vy
+                              df['mu1_grandgrandmother_vz'] = tab.mu1.grandgrandmother.vz
+                              df['mu2_grandgrandmother_vz'] = tab.mu2.grandgrandmother.vz
+  
+                              if(channel != 'BTo2Mu3P'):
+                                  df['k_grandgrandmother_pdgId'] = tab.k.grandgrandmother.pdgId
+                                  df['k_grandgrandmother_pt'] = tab.k.grandgrandmother.p4.pt
+                                  df['k_grandgrandmother_eta'] = tab.k.grandgrandmother.p4.eta  
+                                  df['k_grandgrandmother_phi'] = tab.k.grandgrandmother.p4.phi
+                                  df['k_grandgrandmother_vx'] = tab.k.grandgrandmother.vx
+                                  df['k_grandgrandmother_vy'] = tab.k.grandgrandmother.vy
+                                  df['k_grandgrandmother_vz'] = tab.k.grandgrandmother.vz
+  
+                              else:
+                                  df['pi1_grandgrandmother_pdgId'] = tab.pi1.grandgrandmother.pdgId
+                                  df['pi1_grandgrandmother_pt'] = tab.pi1.grandgrandmother.p4.pt
+                                  df['pi1_grandgrandmother_eta'] = tab.pi1.grandgrandmother.p4.eta  
+                                  df['pi1_grandgrandmother_phi'] = tab.pi1.grandgrandmother.p4.phi
+                                  df['pi1_grandgrandmother_vx'] = tab.pi1.grandgrandmother.vx
+                                  df['pi1_grandgrandmother_vy'] = tab.pi1.grandgrandmother.vy
+                                  df['pi1_grandgrandmother_vz'] = tab.pi1.grandgrandmother.vz
+  
+                                  df['pi2_grandgrandmother_pdgId'] = tab.pi2.grandgrandmother.pdgId
+                                  df['pi2_grandgrandmother_pt'] = tab.pi2.grandgrandmother.p4.pt
+                                  df['pi2_grandgrandmother_eta'] = tab.pi2.grandgrandmother.p4.eta  
+                                  df['pi2_grandgrandmother_phi'] = tab.pi2.grandgrandmother.p4.phi
+                                  df['pi2_grandgrandmother_vx'] = tab.pi2.grandgrandmother.vx
+                                  df['pi2_grandgrandmother_vy'] = tab.pi2.grandgrandmother.vy
+                                  df['pi2_grandgrandmother_vz'] = tab.pi2.grandgrandmother.vz
+                                  
+                                  df['pi3_grandgrandmother_pdgId'] = tab.pi3.grandgrandmother.pdgId
+                                  df['pi3_grandgrandmother_pt'] = tab.pi3.grandgrandmother.p4.pt
+                                  df['pi3_grandgrandmother_eta'] = tab.pi3.grandgrandmother.p4.eta  
+                                  df['pi3_grandgrandmother_phi'] = tab.pi3.grandgrandmother.p4.phi
+                                  df['pi3_grandgrandmother_vx'] = tab.pi3.grandgrandmother.vx
+                                  df['pi3_grandgrandmother_vy'] = tab.pi3.grandgrandmother.vy
+                                  df['pi3_grandgrandmother_vz'] = tab.pi3.grandgrandmother.vz
+  
+                          
+                      if(dataset == mc_mu or dataset == mc_tau or dataset == mc_x):
+                          df = lifetime_weight(df, fake = False)
+                      else:
+                          df = lifetime_weight(df)
+                      df = jpsi_branches(df)
+                      if channel != 'BTo2Mu3P':
+                          df = DR_jpsimu(df)
+                          df = mcor(df)
+                      df = decaytime(df)
+                          
+                      #print("Finito di processare la flag ",name, " la concateno a quella totale.")
+                      
+                      if(channel=='BTo3Mu'):
+                          final_dfs_mmm[name] = pd.concat((final_dfs_mmm[name], dfs[name])) # da scrievre esplicito?
+                      elif(channel == 'BTo2MuP'):
+                          final_dfs_pmm[name] = pd.concat((final_dfs_pmm[name], dfs[name])) # da scrievre esplicito
+                      elif(channel == 'BTo2MuK'):
+                          final_dfs_kmm[name] = pd.concat((final_dfs_kmm[name], dfs[name])) # da scrievre esplicito
+                      elif(channel == 'BTo2Mu3P'):
+                          final_dfs_2m3p[name] = pd.concat((final_dfs_2m3p[name], dfs[name])) # da scrievre esplicito
+                      if(nprocessedDataset > maxEvents and maxEvents != -1):
+                          break
+  
+      dataset=dataset.strip('.txt')
+      name=dataset.split('/')
+      d=name[len(name)-1].split('_')
+      adj=''
+      if(dataset != mc_onia):
+          adj = '_UL_flags'
+      
+      for flag in flag_names:
+          outFileName = 'dataframes_local/%s_%s%s_%d.root' % (d[0],flag, adj, index)
+          for channel in channels:
+              if channel == 'BTo3Mu':
+                  final_dfs_mmm[flag].to_root(outFileName, key=channel)
+              elif (channel == 'BTo2MuP'):
+                  final_dfs_pmm[flag].to_root(outFileName, key=channel, mode = 'a')
+              elif (channel == 'BTo2MuK'):
+                  final_dfs_kmm[flag].to_root(outFileName, key=channel, mode = 'a')
+              elif (channel == 'BTo2Mu3P'):
+                  final_dfs_2m3p[flag].to_root(outFileName, key=channel, mode = 'a')
+  
+          print("Saved file %s" % outFileName)
+  
+  
+  print('DONE! Processed events: ', nprocessedAll)
+
+def pf(skip):
+  processFile(data=args.data, mc_mu=args.mc_mu, mc_tau=args.mc_tau, mc_x=args.mc_x, mc_onia=args.mc_onia, mc_gen=args.mc_gen, nFilesPerJob=args.nfilesperjob, fileSetsToSkip=skip)
+if __name__ == '__main__':
+    pool = Pool(processes=100)
+    arguments = range(11)
+    pool.map(pf, arguments )
+
+  #def processFile(data='', mc_mu='', mc_tau='', mc_x='', mc_onia='', mc_gen='', nMaxFiles =2, skipFiles =0):
+  #processFile(mc_onia='oniaX_list.txt', skipFiles =1)
+  

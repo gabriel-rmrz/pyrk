@@ -10,6 +10,7 @@ parser.add_argument('--mc_tau', default='',help='txt file with paths of NanoAOD 
 parser.add_argument('--mc_x', default='',help='txt file with paths of NanoAOD mc that needs to delete signal')
 parser.add_argument('--mc_onia', default='',help='txt file with paths of NanoAOD mc that needs to delete signal')
 parser.add_argument('--mc_gen', default='',help='txt file with paths of NanoAOD generic mc')
+parser.add_argument('--nfilesperjob', default=1,type=int,help='txt file with paths of NanoAOD generic mc')
 
 args = parser.parse_args()
 
